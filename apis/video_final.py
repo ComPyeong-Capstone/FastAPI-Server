@@ -71,8 +71,6 @@ def create_final_video(video_urls: List[str], subtitles: List[str], music_url: s
 # FastAPI 엔드포인트
 @router.post("/")
 async def generate_final_video(videos: List[str], subtitles: List[str], music_url: str):
-    if not (6 <= len(videos) <= 12 and 6 <= len(subtitles) <= 12):
-        return {"error": "비디오와 자막 개수는 6~12개여야 합니다."}
 
     final_video_path = create_final_video(videos, subtitles, music_url)
 
