@@ -3,6 +3,7 @@ import base64
 from fastapi import APIRouter
 from typing import List
 import os
+import requests
 from runwayml import RunwayML  # ✅ Runway API 클라이언트 사용
 
 router = APIRouter()
@@ -14,22 +15,14 @@ RUNWAY_API_KEY = os.getenv("RUNWAY_API_KEY")
 client = RunwayML(api_key=RUNWAY_API_KEY)
 
 # Runway API 호출 함수
-def generate_video(image_path: str, subtitle: str):
-    """
-    주어진 이미지와 자막을 기반으로 Runway API를 사용해 5초짜리 영상을 생성하는 함수.
-    """
-    
+def generate_video(image_path: str, subtitle: str, index: int):
     # 이미지 파일을 Base64로 인코딩
     with open(image_path, "rb") as f:
         base64_image = base64.b64encode(f.read()).decode("utf-8")
-
-    # Image-to-Video 작업 생성
-    print(f"Creating video generation task for: {subtitle}")
-    
     task = client.image_to_video.create(
         model='gen3a_turbo',  # ✅ 최신 모델 사용
         prompt_image=f"data:image/png;base64,{base64_image}",
-        prompt_text=subtitle,
+        prompt_text=f"Create a cinematic animation that visually represents {subtitle}, inspired by the given image.",
         duration=5,  # ✅ 5초짜리 영상 생성
         ratio="768:1280",  # ✅ 기본 비율 설정
     )
@@ -49,22 +42,39 @@ def generate_video(image_path: str, subtitle: str):
 
     # 작업 결과 반환
     if task_status.status == 'SUCCEEDED':
-        print(f"Task completed successfully! Video URL: {task_status.output[0]}")
-        return task_status.output[0]  # ✅ 생성된 영상 URL 반환
+        video_url = task_status.output[0]  # ✅ 영상 URL 가져오기
+        print(f"Task completed successfully! Video URL: {video_url}")
+
+        # ✅ 영상 다운로드 후 저장
+        video_filename = f"videos/generated_video_{index}.mp4"  # ✅ 저장될 파일명
+        download_video(video_url, video_filename)
+
+        return f"http://127.0.0.1:8000/{video_filename}"
     else:
-        print("Task failed. No video generated.")
+        print("Task failed. No video generated.", task_status.error)
         return None
+
+# ✅ 영상 다운로드 함수
+def download_video(video_url: str, save_path: str):
+    print(f"Downloading video from: {video_url}")
+    
+    response = requests.get(video_url, stream=True)
+    if response.status_code == 200:
+        with open(save_path, "wb") as video_file:
+            for chunk in response.iter_content(chunk_size=1024):
+                video_file.write(chunk)
+        print(f"✅ Video saved: {save_path}")
+    else:
+        print(f"❌ Failed to download video: {video_url}")
 
 # FastAPI 엔드포인트
 @router.post("/")
 async def generate_partial_videos(images: List[str], subtitles: List[str]):
-    """
-    여러 개의 이미지와 자막을 받아 각 자막에 맞는 5초짜리 영상을 생성 후 반환하는 API 엔드포인트.
-    """
-    
     video_urls = []
-    for image, subtitle in zip(images, subtitles):
-        video_url = generate_video(image, subtitle)
+    for index, (image, subtitle) in enumerate(zip(images, subtitles)):
+        video_url = generate_video(image, subtitle, index)
         video_urls.append(video_url)
 
     return {"video_urls": video_urls}
+
+# 영상 하나 약 30초
