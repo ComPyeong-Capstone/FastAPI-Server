@@ -4,3 +4,4 @@ __pycache__/
 images/
 videos/
 music/
+.DS_Store
