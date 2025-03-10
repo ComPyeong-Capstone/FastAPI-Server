@@ -2,8 +2,15 @@
 from fastapi import APIRouter
 from typing import List
 import os
+import requests
+import base64
+import json
 from pydantic import BaseModel
+from moviepy.editor import CompositeAudioClip
 from moviepy.editor import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip, AudioFileClip
+
+GOOGLE_TTS_API_KEY = os.getenv("GOOGLE_TTS_API_KEY")
+#GOOGLE_TTS_API_KEY = ""
 
 router = APIRouter()
 
@@ -12,9 +19,49 @@ class FinalVideoRequest(BaseModel):
     subtitles: List[str]
     music_url: str
 
+# TTS 생성 함수
+def text_to_speech(subtitles: List[str]):
+    url = f"https://texttospeech.googleapis.com/v1/text:synthesize?key={GOOGLE_TTS_API_KEY}"
+
+    if isinstance(subtitles, list):
+        text = " ".join(subtitles)
+    else:
+        text = subtitles
+
+    data = {
+        "input": {"text": text},
+        "voice": {
+            "languageCode": "ko-KR",
+            "name": "ko-KR-Wavenet-C",
+            "ssmlGender": "MALE"
+        },
+        "audioConfig": {
+            "audioEncoding": "MP3",
+            "speakingRate": 1.25  # 속도 조정 가능
+        }
+    }
+
+    response = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(data))
+
+    if response.status_code == 200:
+        response_data = response.json()
+        audio_content = response_data["audioContent"]
+        output_folder = "music"
+        output_file = os.path.join(output_folder, "tts.mp3")
+        with open(output_file, "wb") as f:
+            f.write(base64.b64decode(audio_content))
+        print(f"✅ TTS 음성 파일이 저장되었습니다: {output_file}")
+        return output_file
+    else:
+        print(f"❌ TTS 오류 발생: {response.status_code} - {response.text}")
+        return None
+
+
 # 최종 비디오 생성 함수
 def create_final_video(video_filenames: List[str], subtitles: List[str], music_url: str):
     video_clips = []
+
+    tts_audio_path = text_to_speech(subtitles)
 
     FONT_PATH = "/System/Library/Fonts/AppleSDGothicNeo.ttc"  # ✅ 한글 폰트 지원
     FONT_SIZE = 50
@@ -55,16 +102,18 @@ def create_final_video(video_filenames: List[str], subtitles: List[str], music_u
     # ✅ 모든 비디오 클립 이어 붙이기
     final_video = concatenate_videoclips(video_clips, method="compose")
 
-    # ✅ 배경 음악 설정
+    # ✅ 배경음악 로드
     music_path = os.path.join("music", music_url)
+    bgm_audio = AudioFileClip(music_path).volumex(0.2)  # 배경음 줄이기
 
-    if not os.path.exists(music_path):
-        raise FileNotFoundError(f"{music_path} 배경 음악 파일이 존재하지 않습니다.")
+    # ✅ TTS 로드
+    tts_audio = AudioFileClip(tts_audio_path)
 
-    bgm_audio = AudioFileClip(music_path).set_duration(final_video.duration)
+    # ✅ 두 오디오를 합침
+    combined_audio = CompositeAudioClip([bgm_audio, tts_audio]).set_duration(final_video.duration)
 
-    # ✅ 배경음악을 영상에 삽입
-    final_video_with_bgm = final_video.set_audio(bgm_audio)
+    # ✅ 최종 오디오 삽입
+    final_video_with_bgm = final_video.set_audio(combined_audio)
 
     # ✅ 최종 비디오 저장 (videos 폴더에 저장)
     if not os.path.exists("videos"):
