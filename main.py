@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from apis import ai_material, video_partial, video_final
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="AI Video Generation API")
 
@@ -12,6 +13,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.mount("/videos", StaticFiles(directory="videos"), name="videos")
+app.mount("/images", StaticFiles(directory="images"), name="images")
 
 # API 라우터 등록
 app.include_router(ai_material.router, prefix="/generate/material", tags=["AI_Image"])

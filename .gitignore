@@ -2,4 +2,6 @@
 __pycache__/
 *.pyc
 images/
+videos/
+music/
 .DS_Store
