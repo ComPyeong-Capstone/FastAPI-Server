@@ -4,9 +4,13 @@ import base64
 import os
 import whisper
 from pydub import AudioSegment
+from dotenv import load_dotenv
+
+# .env 파일 로드
+load_dotenv()
 
 # 🔹 Google Cloud API 키
-GOOGLE_TTS_API_KEY = ""
+GOOGLE_TTS_API_KEY = os.getenv("GOOGLE_TTS_API_KEY")
 
 # 🔹 API 요청 URL
 url = f"https://texttospeech.googleapis.com/v1/text:synthesize?key={GOOGLE_TTS_API_KEY}"
