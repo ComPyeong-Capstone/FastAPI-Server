@@ -4,10 +4,11 @@ from pydantic import BaseModel
 import openai
 import os
 import requests
-
+from dotenv import load_dotenv
 router = APIRouter()
 
 # 환경 변수에서 API 키 로드
+load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 STABLE_DIFFUSION_API_KEY = os.getenv("STABLE_DIFFUSION_API_KEY")
 
