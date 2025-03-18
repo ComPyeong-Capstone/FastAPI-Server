@@ -2,9 +2,6 @@
 from fastapi import APIRouter
 from typing import List
 import os
-import requests
-import base64
-import json
 from pydantic import BaseModel
 from moviepy.editor import CompositeAudioClip
 from moviepy.editor import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip, AudioFileClip
@@ -17,9 +14,6 @@ class FinalVideoRequest(BaseModel):
     subtitles: List[str]
     music_url: str
 
-
-
-
 # 최종 비디오 생성 함수
 def create_final_video(video_filenames: List[str], subtitles: List[str], music_url: str):
     video_clips = []
@@ -27,10 +21,10 @@ def create_final_video(video_filenames: List[str], subtitles: List[str], music_u
     tts_audio_path = tts.text_to_speech(subtitles)
 
     FONT_PATH = "/System/Library/Fonts/AppleSDGothicNeo.ttc"  # ✅ 한글 폰트 지원
-    FONT_SIZE = 50
+    FONT_SIZE = 40
     TEXT_COLOR = "white"
     TEXT_BOX_HEIGHT = 100  # 자막 높이 조절
-    SUBTITLE_Y_POSITION = -150  # 하단에서 150px 위 (음.. 너가 원하면 조정 가능!)
+    SUBTITLE_Y_POSITION = -150  # 하단에서 150px 위
 
     # 비디오 다운로드 및 VideoFileClip 변환
     for idx, video_filename in enumerate(video_filenames):
@@ -50,7 +44,7 @@ def create_final_video(video_filenames: List[str], subtitles: List[str], music_u
                 fontsize=FONT_SIZE,
                 color=TEXT_COLOR,
                 font=FONT_PATH,
-                size=(clip.w, TEXT_BOX_HEIGHT + 50),  # ✅ 자막 박스 가로 크기와 높이
+                size=(clip.w, TEXT_BOX_HEIGHT + 75),  # ✅ 자막 박스 가로 크기와 높이
                 method='caption'  # ✅ 자동 줄바꿈 지원 (긴 문장 대응)
             )
             .set_position(("center", clip.h + SUBTITLE_Y_POSITION))  # ✅ 위치 설정

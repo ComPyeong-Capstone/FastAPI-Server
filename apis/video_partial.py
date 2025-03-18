@@ -15,8 +15,9 @@ RUNWAY_API_KEY = os.getenv("RUNWAY_API_KEY")
 client = RunwayML(api_key=RUNWAY_API_KEY)
 
 # Runway API 호출 함수
-def generate_video(image_path: str, subtitle: str, index: int):
+def generate_video(image_filename: str, subtitle: str, index: int):
     # 이미지 파일을 Base64로 인코딩
+    image_path = os.path.join("images", image_filename)
     with open(image_path, "rb") as f:
         base64_image = base64.b64encode(f.read()).decode("utf-8")
     task = client.image_to_video.create(
@@ -46,7 +47,7 @@ def generate_video(image_path: str, subtitle: str, index: int):
         print(f"Task completed successfully! Video URL: {video_url}")
 
         # ✅ 영상 다운로드 후 저장
-        video_filename = f"videos/generated_video_{index}.mp4"  # ✅ 저장될 파일명
+        video_filename = f"videos/generated_{image_filename}.mp4"  # ✅ 저장될 파일명
         download_video(video_url, video_filename)
 
         return f"http://127.0.0.1:8000/{video_filename}"

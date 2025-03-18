@@ -23,18 +23,37 @@ class MaterialRequest(BaseModel):
 def generate_script(title: str, duration: int):
     segments = duration // 5  # 5초에 1개씩 자막 생성
     prompt = f"""
-    {title} 주제에 맞는 숏폼 대본을 생성해줘. 총 {segments}개의 문장으로 구성되어야 하고, 각 문장은 반드시 12개의 단어로 이루어져야 해. 번호 없이 문장만 출력해줘.
-    """.strip()
-    #12개 단어로 구성된 문장을 1.15 속도로 했을 때 5초에 가깝게 생성
+        아래 주제에 맞는 유튜브 숏폼 영상 스크립트를 작성해.
+        주제: "{title}"
+        
+        절대적인 작성 규칙
+        1. 총 {segments}개의 문장으로 구성되어야 한다. 
+        2. 각 문장은 반드시 13개의 단어로 이루어져야 한다.
+        3. 이 규칙을 어기면 결과는 실패한 것으로 간주한다.
+        4. 문장마다 줄바꿈(엔터)을 넣어서 각 문장이 줄바꿈으로 구분되게 한다.
+        5. 빈 줄은 절대 추가하지 않는다.
+
+        문장 스타일 규칙
+        1. 영상은 시청자의 관심을 끌 수 있는 오프닝 질문이나 상황으로 시작한다.
+        2. 주제에 따라 핵심 아이디어나 사례를 자연스럽게 설명한다..
+        - 단순 나열은 피하고, 각 아이디어가 이어지도록 작성한다..
+        - 숫자나 목록 형식(1., 2., 3.)은 사용하지 말고, 설명하는 형식(첫 번째, 두 번째, 세 번째)으로 작성한다..
+        3. 영상 마지막은 시청자의 참여를 유도하는 콜투액션이나 긍정적인 응원의 멘트로 마무리한다.
+        """.strip()
     response = client.chat.completions.create(
         model="gpt-4-turbo",
         messages=[{"role": "system", "content": "너는 숏폼 영상 대본을 생성하는 전문가야."},
                   {"role": "user", "content": prompt}],
     )
     
-    # ✅ OpenAI 응답에서 텍스트 추출 후 줄바꿈 기준으로 리스트로 변환
+    # ✅ 응답 텍스트 줄바꿈 기준으로 자르기
     raw_script = response.choices[0].message.content.split("\n")
-    return raw_script[:segments]
+
+    # ✅ 각 문장 앞뒤 공백 제거 + 빈 문장 제거
+    clean_script = [sentence.strip() for sentence in raw_script if sentence.strip()]
+
+    # ✅ 필요한 문장 개수만 반환
+    return clean_script[:segments]
 
 # ✅ 전체 subtitles 리스트를 한 번에 번역
 def translate_to_english(text_list: list):
@@ -134,6 +153,7 @@ async def generate_material(request: MaterialRequest):
 
     print("\n✅ 생성된 대본:", subtitles)  # 🚀 OpenAI에서 받은 대본 확인
 
+    image_urls = []
     print("\n🚀 이미지 생성 시작!")
     image_urls = generate_images(subtitles)
 
@@ -145,4 +165,4 @@ async def generate_material(request: MaterialRequest):
 
     return response_data
 
-# 자막 생성 약 10초, 영문 변환 약 5초, 프롬프트 생성 약 10초, 이미지 하나 생성 약 3.5초
+# 자막 생성 약 15초, 영문 변환 약 5초, 프롬프트 생성 약 10초, 이미지 하나 생성 약 3.5초
