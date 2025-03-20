@@ -5,7 +5,7 @@ import os
 import whisper
 from pydub import AudioSegment
 from dotenv import load_dotenv
-
+import time
 # .env 파일 로드
 load_dotenv()
 
@@ -107,29 +107,50 @@ def text_to_speech(text_list):
     output_file = os.path.join(output_folder, get_next_filename())
     combined_audio.export(output_file, format="mp3")  # 최종 음성 파일 저장
     print(f"✅ TTS 음성 파일이 생성되었습니다: {output_file}")
+    analyze_audio_with_whisper(output_file)
     return output_file
-    # analyze_audio_with_whisper(output_file)  # Whisper 분석 실행
 
 
 
 def analyze_audio_with_whisper(audio_file):
-    """
-    Whisper 모델을 사용하여 생성된 음성 파일을 분석하고,
-    음성 내 각 문장의 시작 및 끝 시간을 터미널에 출력하는 함수.
-    """
+    start_time_exec = time.time()  # 시작 시각 기록
+
+    # Whisper 모델을 사용하여 생성된 음성 파일을 분석하고,
+    # 음성 내 각 문장의 시작 및 끝 시간을 터미널에 출력하는 함수.
+    
     model = whisper.load_model("medium")
     result = model.transcribe(audio_file, word_timestamps=True)
     
     print("\n🔍 [Whisper 분석 결과] 🔍")
     print(f"🎵 파일명: {audio_file}\n")
+
+    durations = []  # 각 구간 길이를 저장할 배열
     
-    for segment in result["segments"]:
+    for idx, segment in enumerate(result["segments"]):
         start_time = round(segment["start"], 2)
         end_time = round(segment["end"], 2)
         text = segment["text"]
+
+        duration = round(end_time - start_time, 2)
+
+        if idx == 0:
+            div_duration = round(duration / 2, 2)  # 첫 번째 인덱스는 2로 나눈 값
+        else:
+            div_duration = round((duration + 1) / 2, 2)  # 두 번째부터는 (duration + 1) / 2 값
+
+        
+        durations.append(div_duration)
+
         print(f"⏱ {start_time}초 ~ {end_time}초: {text}")
+
+        
+    end_time_exec = time.time()  # 끝나는 시각 기록
+    elapsed_time = round(end_time_exec - start_time_exec, 2)
     
+    print(f"\n🚀 함수 실행 시간: {elapsed_time}초")
     print("\n" + "-" * 50 + "\n")
+    print(durations)
+    return durations
 
 # 🔹 테스트 실행
 # subtitles = [
