@@ -88,11 +88,22 @@ def text_to_speech(text_list):
             
             # 현재 문장이 정확히 start_time에 시작되도록 공백 추가
             silent_gap = AudioSegment.silent(duration=max(0, start_time - len(combined_audio)))
+            
+            # ⬇⬇ 5초 이후의 문장부터는 시작 전에 0.5초 추가 ⬇⬇
+            if start_time >= 5000:
+                silent_gap += AudioSegment.silent(duration=500)  # 0.5초 추가
+
             combined_audio += silent_gap + tts_audio
             
             start_time += interval  # 다음 문장 시작 시점 업데이트 (5초 추가)
             os.remove(temp_audio_path)  # 임시 파일 삭제
     
+       # ✅ 최종 오디오 길이를 5초 단위로 맞추기
+    final_length_ms = ((len(combined_audio) + 4999) // 5000) * 5000  # 5초 배수로 올림
+    if len(combined_audio) < final_length_ms:
+        padding_duration = final_length_ms - len(combined_audio)
+        combined_audio += AudioSegment.silent(duration=padding_duration)  # 무음 패딩 추가
+
     output_file = os.path.join(output_folder, get_next_filename())
     combined_audio.export(output_file, format="mp3")  # 최종 음성 파일 저장
     print(f"✅ TTS 음성 파일이 생성되었습니다: {output_file}")
