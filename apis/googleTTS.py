@@ -63,94 +63,89 @@ def generate_tts(text):
 
 
 
+# 문장을 단어 기준으로 앞/뒤로 분리하는 함수 (홀수는 앞부분이 더 많게)
+def split_sentence(sentence):
+    words = sentence.strip().split()
+    mid = (len(words) + 1) // 2
+    return ' '.join(words[:mid]), ' '.join(words[mid:])
+
+# 메인 함수: 입력된 문자열 리스트를 TTS로 변환 후 합치고 duration 배열 반환
 def text_to_speech(text_list):
-  
-    # 입력된 문장 리스트를 개별적으로 TTS 변환한 후,
-    # 각 문장의 시작 시간을 5초 간격으로 맞춰 하나의 오디오 파일로 합치는 함수.
-  
     if not isinstance(text_list, list):
         raise ValueError("입력은 리스트 형식이어야 합니다.")
     
-    combined_audio = AudioSegment.silent(duration=0)  # 최종 오디오 파일 (초기 무음 상태)
-    start_time = 0  # 문장별 시작 시간 (밀리초 단위)
-    interval = 5000  # 각 문장이 시작하는 간격 (5초 = 5000ms)
-    
-    for idx, text in enumerate(text_list):
-        print(f"🔹 {idx * 5}초에 시작할 문장: {text}")
-        
-        audio_data = generate_tts(text)  # TTS 변환 실행
-        if audio_data:
-            temp_audio_path = os.path.join(output_folder, f"temp_tts_{idx}.mp3")
-            with open(temp_audio_path, "wb") as f:
-                f.write(audio_data)
-            
-            tts_audio = AudioSegment.from_mp3(temp_audio_path)  # 생성된 오디오 파일 로드
-            
-            # 현재 문장이 정확히 start_time에 시작되도록 공백 추가
-            silent_gap = AudioSegment.silent(duration=max(0, start_time - len(combined_audio)))
-            
-            # ⬇⬇ 5초 이후의 문장부터는 시작 전에 0.5초 추가 ⬇⬇
-            if start_time >= 5000:
-                silent_gap += AudioSegment.silent(duration=500)  # 0.5초 추가
+    combined_audio = AudioSegment.silent(duration=0)
+    start_time = 0
+    interval = 5000
+    front_durations = []  # 각 앞부분의 duration 저장
 
-            combined_audio += silent_gap + tts_audio
-            
-            start_time += interval  # 다음 문장 시작 시점 업데이트 (5초 추가)
-            os.remove(temp_audio_path)  # 임시 파일 삭제
-    
-       # ✅ 최종 오디오 길이를 5초 단위로 맞추기
-    final_length_ms = ((len(combined_audio) + 4999) // 5000) * 5000  # 5초 배수로 올림
+    for idx, text in enumerate(text_list):
+        # 문장 분리
+        front_part, back_part = split_sentence(text)
+
+        # 앞부분 TTS 생성 및 분석
+        front_tts_data = generate_tts(front_part)
+        front_temp_path = os.path.join(output_folder, f"temp_front_{idx}.mp3")
+        with open(front_temp_path, "wb") as f:
+            f.write(front_tts_data)
+
+        front_duration = analyze_audio_with_whisper(front_temp_path)
+        front_durations.append(front_duration)
+
+        # 분리된 두 부분을 다시 합쳐서 최종 TTS 생성
+        merged_text = front_part + " " + back_part
+        merged_tts_data = generate_tts(merged_text)
+
+        merged_temp_path = os.path.join(output_folder, f"temp_merged_{idx}.mp3")
+        with open(merged_temp_path, "wb") as f:
+            f.write(merged_tts_data)
+
+        tts_audio = AudioSegment.from_mp3(merged_temp_path)
+
+        # 시작 시간 맞추기 위한 무음 추가
+        silent_gap = AudioSegment.silent(duration=max(0, start_time - len(combined_audio)))
+        if start_time >= 5000:
+            silent_gap += AudioSegment.silent(duration=500)
+
+        # 최종 오디오에 추가
+        combined_audio += silent_gap + tts_audio
+        start_time += interval
+
+        # 임시 파일 정리
+        os.remove(front_temp_path)
+        os.remove(merged_temp_path)
+
+    # 전체 길이를 5초 단위로 맞추기
+    final_length_ms = ((len(combined_audio) + 4999) // 5000) * 5000
     if len(combined_audio) < final_length_ms:
         padding_duration = final_length_ms - len(combined_audio)
-        combined_audio += AudioSegment.silent(duration=padding_duration)  # 무음 패딩 추가
+        combined_audio += AudioSegment.silent(duration=padding_duration)
 
+    # 최종 파일 저장
     output_file = os.path.join(output_folder, get_next_filename())
-    combined_audio.export(output_file, format="mp3")  # 최종 음성 파일 저장
+    combined_audio.export(output_file, format="mp3")
     print(f"✅ TTS 음성 파일이 생성되었습니다: {output_file}")
-    analyze_audio_with_whisper(output_file)
-    return output_file
+
+    # 파일 경로와 앞부분 duration 배열 반환
+    return output_file, front_durations
 
 
-
+# Whisper 모델을 통해 오디오의 앞부분 duration과 각 타이밍을 분석하고 출력하는 함수
 def analyze_audio_with_whisper(audio_file):
-    start_time_exec = time.time()  # 시작 시각 기록
-
-    # Whisper 모델을 사용하여 생성된 음성 파일을 분석하고,
-    # 음성 내 각 문장의 시작 및 끝 시간을 터미널에 출력하는 함수.
-    
     model = whisper.load_model("medium")
     result = model.transcribe(audio_file, word_timestamps=True)
-    
-    print("\n🔍 [Whisper 분석 결과] 🔍")
-    print(f"🎵 파일명: {audio_file}\n")
 
-    durations = []  # 각 구간 길이를 저장할 배열
-    
+    print(f"\n🔍 [Whisper 분석 결과: {audio_file}] 🔍")
     for idx, segment in enumerate(result["segments"]):
-        start_time = round(segment["start"], 2)
-        end_time = round(segment["end"], 2)
+        start = round(segment["start"], 2)
+        end = round(segment["end"], 2)
         text = segment["text"]
+        print(f"⏱ 세그먼트 {idx}: {start}s ~ {end}s | 텍스트: {text}")
 
-        duration = round(end_time - start_time, 2)
+    first_segment = result["segments"][0]
+    duration = round(first_segment["end"] - first_segment["start"], 2)
+    return duration
 
-        if idx == 0:
-            div_duration = round(duration / 2, 2)  # 첫 번째 인덱스는 2로 나눈 값
-        else:
-            div_duration = round((duration + 1) / 2, 2)  # 두 번째부터는 (duration + 1) / 2 값
-
-        
-        durations.append(div_duration)
-
-        print(f"⏱ {start_time}초 ~ {end_time}초: {text}")
-
-        
-    end_time_exec = time.time()  # 끝나는 시각 기록
-    elapsed_time = round(end_time_exec - start_time_exec, 2)
-    
-    print(f"\n🚀 함수 실행 시간: {elapsed_time}초")
-    print("\n" + "-" * 50 + "\n")
-    print(durations)
-    return durations
 
 # 🔹 테스트 실행
 # subtitles = [
@@ -169,3 +164,12 @@ def analyze_audio_with_whisper(audio_file):
 
 # text_to_speech(subtitles)
 # text_to_speech(subtitles2)
+
+
+# {
+#   "videos": ["video1.mp4", "video2.mp4"],
+#   "subtitles": [
+#     "코드를 작성할 때 주석을 충분히 달지 않는 실수를 종종 합니다.",
+#     "변수명을 명확하지 않게 지어서 나중에 혼란을 겪게 되죠."],
+#   "music_url": "bgm_01.mp3"
+# }

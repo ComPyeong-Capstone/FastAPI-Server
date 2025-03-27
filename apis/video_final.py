@@ -18,8 +18,8 @@ class FinalVideoRequest(BaseModel):
 def create_final_video(video_filenames: List[str], subtitles: List[str], music_url: str):
     video_clips = []
 
-    tts_audio_path = tts.text_to_speech(subtitles)
-    durations = tts.analyze_audio_with_whisper(tts_audio_path)  # 각 자막 구간의 duration 배열 반환
+    tts_audio_path, durations = tts.text_to_speech(subtitles)
+    # durations = tts.analyze_audio_with_whisper(tts_audio_path)  # 각 자막 구간의 duration 배열 반환
 
 
     FONT_PATH = "/System/Library/Fonts/AppleSDGothicNeo.ttc"  # ✅ 한글 폰트 지원
@@ -42,9 +42,9 @@ def create_final_video(video_filenames: List[str], subtitles: List[str], music_u
         # ✅ 자막 절반으로 나누기 작업 시작
         subtitle_text = subtitles[idx]
         words = subtitle_text.strip().split()
-        half = len(words) // 2
-        if len(words) % 2 != 0:
-            half += 1  # ✅ 홀수일 경우 앞 부분이 더 짧도록 조정
+        half = (len(words)+1) // 2
+        # if len(words) % 2 != 0:
+        #     half += 1  # ✅ 홀수일 경우 앞 부분이 더 짧도록 조정
 
         first_sub = " ".join(words[:half])  # ✅ 첫 번째 절반 자막
         second_sub = " ".join(words[half:])  # ✅ 두 번째 절반 자막
