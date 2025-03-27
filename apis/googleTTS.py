@@ -120,8 +120,6 @@ def text_to_speech(text_list):
     if len(combined_audio) < final_length_ms:
         padding_duration = final_length_ms - len(combined_audio)
         combined_audio += AudioSegment.silent(duration=padding_duration)
-        print(f"🔸 마지막 구간 끝에도 {padding_duration}ms 만큼 무음이 추가되었습니다.")
-
 
     # 최종 파일 저장
     output_file = os.path.join(output_folder, get_next_filename())
