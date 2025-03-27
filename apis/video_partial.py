@@ -20,15 +20,36 @@ client = RunwayML(api_key=RUNWAY_API_KEY)
 def generate_prompt(subtitles: List[str]) -> List[str]:
     subtitles_list = "\n".join([f"{idx+1}. {subtitle}" for idx, subtitle in enumerate(subtitles)])
 
-    prompt_for_gpt = f"""
-    You are an expert at writing prompts for AI video generation from an input image.
+    # 간단하고 명료한 영상 생성을 위한 프롬프트 생성
+    # prompt_for_gpt = f"""
+    # You are an expert at writing prompts for AI video generation from an input image.
 
-    For each of the following subtitles, generate a short, dynamic, and cinematic prompt.  
-    Focus on actions, emotions, and atmosphere, not background details.
+    # For each of the following subtitles, generate a short, dynamic, and cinematic prompt.  
+    # Focus on actions, emotions, and atmosphere, not background details.
+
+    # ⚠️ Return a numbered list of prompts.  
+    # ⚠️ Make sure the number of prompts matches the number of subtitles exactly, one prompt per subtitle.  
+    # Return ONLY a numbered list of prompts. No explanations.
+
+    # Subtitles:
+    # {subtitles_list}
+    # """
+
+    # 자세하고 AI스러운 영상 생성을 위한 프롬프트 생성
+    prompt_for_gpt = f"""
+    You are an expert cinematic storyteller specializing in AI-generated video prompts.  
+    Your task is to create highly dynamic, cinematic prompts for an AI video generation model, based on the following subtitles.
+
+    For each subtitle:
+    - Describe energetic and emotionally expressive human actions.  
+    - Include camera movements (slow zoom, dolly, tracking shots) and cinematic composition (close-ups, wide shots).  
+    - Set a vivid atmosphere with lighting (dramatic lighting, backlighting).  
+    - Optionally incorporate futuristic AI elements (holographic displays, augmented reality interfaces).  
+    - Keep the tone immersive, engaging, and visually stunning.  
 
     ⚠️ Return a numbered list of prompts.  
     ⚠️ Make sure the number of prompts matches the number of subtitles exactly, one prompt per subtitle.  
-    Return ONLY a numbered list of prompts. No explanations.
+    Return ONLY the numbered list. No explanations.
 
     Subtitles:
     {subtitles_list}
