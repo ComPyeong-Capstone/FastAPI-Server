@@ -6,6 +6,7 @@ import os
 import requests
 import openai
 from runwayml import RunwayML  # ✅ Runway API 클라이언트 사용
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -17,43 +18,32 @@ RUNWAY_API_KEY = os.getenv("RUNWAY_API_KEY")
 openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
 client = RunwayML(api_key=RUNWAY_API_KEY)
 
+class VideoRequest(BaseModel):
+    images: List[str]
+    subtitles: List[str]
+
 def generate_prompt(subtitles: List[str]) -> List[str]:
-    subtitles_list = "\n".join([f"{idx+1}. {subtitle}" for idx, subtitle in enumerate(subtitles)])
+    
+    # 1. GPT를 통한 프롬프트 생성 방법
+    subtitles_list = "\n".join([f"- {subtitle}" for subtitle in subtitles])
 
-    # 간단하고 명료한 영상 생성을 위한 프롬프트 생성
-    # prompt_for_gpt = f"""
-    # You are an expert at writing prompts for AI video generation from an input image.
-
-    # For each of the following subtitles, generate a short, dynamic, and cinematic prompt.  
-    # Focus on actions, emotions, and atmosphere, not background details.
-
-    # ⚠️ Return a numbered list of prompts.  
-    # ⚠️ Make sure the number of prompts matches the number of subtitles exactly, one prompt per subtitle.  
-    # Return ONLY a numbered list of prompts. No explanations.
-
-    # Subtitles:
-    # {subtitles_list}
-    # """
-
-    # 자세하고 AI스러운 영상 생성을 위한 프롬프트 생성
     prompt_for_gpt = f"""
-    You are an expert cinematic storyteller specializing in AI-generated video prompts.  
-    Your task is to create highly dynamic, cinematic prompts for an AI video generation model, based on the following subtitles.
+    You are an AI prompt engineer for a high-energy, fast-paced, visually explosive video generation model like Runway Gen-3.
 
-    For each subtitle:
-    - Describe energetic and emotionally expressive human actions.  
-    - Include camera movements (slow zoom, dolly, tracking shots) and cinematic composition (close-ups, wide shots).  
-    - Set a vivid atmosphere with lighting (dramatic lighting, backlighting).  
-    - Optionally incorporate futuristic AI elements (holographic displays, augmented reality interfaces).  
-    - Keep the tone immersive, engaging, and visually stunning.  
+    Given the subtitles below, create thrilling, action-packed, and highly energetic prompts for short-form vertical videos.
 
-    ⚠️ Return a numbered list of prompts.  
-    ⚠️ Make sure the number of prompts matches the number of subtitles exactly, one prompt per subtitle.  
-    Return ONLY the numbered list. No explanations.
+    Each prompt should:
+    - Be a single dynamic scene (no multiple time jumps)
+    - Feature intense motion, rapid actions, strong emotional expressions
+    - Use advanced camera movements like whip pan, snap zoom, rapid dolly, handheld shake
+    - Include bold lighting like strobe, neon glow, dynamic shadows, sparks, or digital glitch effects
+    - Optionally include sci-fi or futuristic visuals: holographic interfaces, particle explosions, AI overlays
+    - Avoid static or calm scenes
+    - No numbering, no extra commentary — just one descriptive sentence per subtitle
 
     Subtitles:
     {subtitles_list}
-    """
+    """.strip()
 
     response = openai_client.chat.completions.create(
         model="gpt-4-turbo",
@@ -66,6 +56,38 @@ def generate_prompt(subtitles: List[str]) -> List[str]:
         line.split('. ', 1)[1] if '. ' in line else line 
         for line in prompts if line.strip() != ''
     ]
+
+    # # 2. 단순하게 제작한 프롬프트
+    # # 한글 자막 리스트를 하나의 문자열로 합치기
+    # joined_subtitles = "\n".join(subtitles)
+
+    # # GPT에게 자연스럽고 시각적인 영어로 번역 요청
+    # prompt = f"""
+    # Translate the following Korean subtitles into natural and vivid English.
+    # ⚠️ Return only the translated lines, without any numbering, bullet points, or explanations.
+    # ⚠️ Do NOT add headers like 'Subtitles in English:' — just return one line per subtitle.
+
+    # Korean Subtitles:
+    # {joined_subtitles}
+    # """.strip()
+
+    # response = openai_client.chat.completions.create(
+    #     model="gpt-4-turbo",
+    #     messages=[
+    #         {"role": "system", "content": "You are a professional translator for AI video generation."},
+    #         {"role": "user", "content": prompt}
+    #     ],
+    # )
+
+    # # 응답을 줄 단위로 나누고 정리
+    # translated_lines = [
+    #     line.strip()
+    #     for line in response.choices[0].message.content.strip().split("\n")
+    #     if line.strip()
+    # ]
+
+    # # 최종 프롬프트 생성
+    # cleaned_prompts = [f"Create a cinematic video for the scene: {line}" for line in translated_lines]
 
     print("✅ Generated prompts list:")
     for idx, prompt in enumerate(cleaned_prompts):
@@ -107,7 +129,15 @@ def generate_video(image_filename: str, subtitle: str):
         print(f"Task completed successfully! Video URL: {video_url}")
 
         filename_without_ext, _ = os.path.splitext(image_filename)
-        save_path = os.path.join("videos", f"generated_{filename_without_ext}.mp4")
+
+        # 고유한 파일 이름 생성
+        base_name = f"generated_{filename_without_ext}_AI"
+        ext = ".mp4"
+        i = 1
+        save_path = os.path.join("videos", f"{base_name}_{i}{ext}")
+        while os.path.exists(save_path):
+            i += 1
+            save_path = os.path.join("videos", f"{base_name}_{i}{ext}")
         download_video(video_url, save_path)
 
         return f"http://127.0.0.1:8000/{save_path}"
@@ -132,11 +162,11 @@ def download_video(video_url: str, save_path: str):
 
 # FastAPI 엔드포인트
 @router.post("/")
-async def generate_partial_videos(images: List[str], subtitles: List[str]):
-    prompts = generate_prompt(subtitles)
+async def generate_partial_videos(request: VideoRequest):
+    prompts = generate_prompt(request.subtitles)
 
     video_urls = []
-    for image, prompt in zip(images, prompts):
+    for image, prompt in zip(request.images, prompts):
         video_url = generate_video(image, prompt)
         video_urls.append(video_url)
 

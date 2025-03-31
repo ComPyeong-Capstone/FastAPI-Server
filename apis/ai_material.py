@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import openai
 import os
 import requests
+from typing import List
 from dotenv import load_dotenv
 router = APIRouter()
 
@@ -16,7 +17,8 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 # ✅ 요청 데이터 모델 정의
 class MaterialRequest(BaseModel):
-    title: str
+    #title: str
+    titles: List[str]
     duration: int
 
 # OpenAI API 호출 함수
@@ -83,6 +85,7 @@ def generate_image_prompt(subtitles):
         {text}
 
         Output:
+        - You must generate exactly {len(subtitles)} image descriptions.
         - Each description must be on a separate line.
         - Ensure the descriptions are vivid, creative, and directly relevant to the subtitle.
         - Do not include any extra text or formatting.
@@ -102,7 +105,7 @@ def generate_image_prompt(subtitles):
 # Stable Diffusion API 호출 함수
 def generate_images(subtitles):
     image_urls = []
-    max_images = 2
+    max_images = 3
 
     if not os.path.exists("images"):
         os.makedirs("images")
@@ -133,11 +136,24 @@ def generate_images(subtitles):
 
         # ✅ 응답 확인 후 저장
         if response.status_code == 200:
-            image_filename = f"images/generated_image_{i}.jpeg"
+            # 고유한 파일 이름 생성
+            base_name = f"generated_image_{i}"
+            ext = ".jpeg"
+            index = 1
+            image_filename = os.path.join("images", f"{base_name}_{index}{ext}")
+            while os.path.exists(image_filename):
+                index += 1
+                image_filename = os.path.join("images", f"{base_name}_{index}{ext}")
+            # ✅ 실제 이미지 파일 저장
             with open(image_filename, "wb") as img_file:
-                img_file.write(response.content)  # ✅ Base64 디코딩 불필요
-            image_urls.append(f"http://127.0.0.1:8000/images/generated_image_{i}.jpeg")
+                img_file.write(response.content)
+
+            # ✅ 이미지 URL 반환용으로 수정
+            image_url = f"http://127.0.0.1:8000/{image_filename.replace(os.sep, '/')}"
+            image_urls.append(image_url)
+
             print(f"✅ 이미지 저장 완료: {image_filename}")
+            
         else:
             print(f"❌ 이미지 생성 실패: {response.status_code} - {response.text}")
             image_urls.append(None)
@@ -149,7 +165,8 @@ def generate_images(subtitles):
 @router.post("/")
 async def generate_material(request: MaterialRequest):
     print("\n🚀 OpenAI 대본 생성 시작!")
-    subtitles = generate_script(request.title, request.duration)
+    #subtitles = generate_script(request.title, request.duration)
+    subtitles = request.titles
 
     print("\n✅ 생성된 대본:", subtitles)  # 🚀 OpenAI에서 받은 대본 확인
 
