@@ -86,6 +86,41 @@ def create_final_video(video_filenames: List[str], subtitles: List[str], music_u
         video_with_subtitles = CompositeVideoClip([clip, first_subtitle, second_subtitle])
         video_clips.append(video_with_subtitles)
 
+    # ✅ 단어별 자막 생성 (위에 선언된 폰트, 폰트 사이즈, 색상 사용)
+    for idx, video_filename in enumerate(video_filenames):
+
+        video_path = os.path.join("videos", video_filename)
+
+        if not os.path.exists(video_path):
+            raise FileNotFoundError(f"{video_path} 파일이 존재하지 않습니다.")
+        
+        # 비디오 클립 생성
+        clip = VideoFileClip(video_path)
+
+        # ✅ 해당 인덱스의 자막 가져오기
+        subtitle_text = subtitles[idx]
+        words = subtitle_text.strip().split()
+
+        # 기본 텍스트 클립
+        txt = TextClip(
+            word,
+            fontsize=FONT_SIZE,         # ✅ 위에서 선언한 FONT_SIZE 사용
+            color=TEXT_COLOR,           # ✅ 위에서 선언한 TEXT_COLOR 사용
+            font=FONT_PATH,             # ✅ 위에서 선언한 FONT_PATH 사용
+            size=(clip.w, None),         # ✅ 비디오 클립 너비 사용
+            method='caption'
+        ).set_position(("center", clip.h + SUBTITLE_Y_POSITION))
+
+        # '튀어나오는' 효과를 주기 위해 처음에 작게 만들고 점점 커지게 애니메이션
+        pop = txt.resize(lambda t: 0.3 + 0.7 * (t / 0.2) if t < 0.2 else 1)
+
+        # 타이밍 맞추기
+        start_time = idx * 0.5     # 예시로 0.5초마다 등장
+        duration = 0.5             # 각 단어 길이도 0.5초로 설정
+
+        pop = pop.set_start(start_time).set_duration(duration)
+        
+        word_clips.append(pop)
 
     # ✅ 모든 비디오 클립 이어 붙이기
     final_video = concatenate_videoclips(video_clips, method="compose")
