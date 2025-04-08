@@ -147,6 +147,46 @@ def analyze_audio_with_whisper(audio_file):
     return duration
 
 
+
+def analyze_audio_words_with_whisper(audio_file):
+    """
+    🔍 주어진 오디오 파일을 Whisper로 분석해서
+    단어 단위 (word-level)로 (단어, 시작시간, 끝시간) 정보를 리스트로 반환하는 함수.
+
+    Args:
+        audio_file (str): 분석할 오디오 파일 경로 (.mp3)
+
+    Returns:
+        List[dict]: 각 단어별 정보 리스트
+            예: [{"word": "Hello", "start": 0.5, "end": 0.8}, ...]
+    """
+
+    # Whisper 모델 로드 (medium 모델 사용)
+    model = whisper.load_model("medium")
+
+    # 오디오를 word timestamps 옵션을 켜고 변환
+    result = model.transcribe(audio_file, word_timestamps=True)
+
+    word_timings = []
+
+    # Whisper 결과 중 segments를 순회
+    for segment in result["segments"]:
+        if "words" in segment:
+            for word_info in segment["words"]:
+                word = word_info.get("word", "").strip()
+                start = round(word_info.get("start", 0), 2)
+                end = round(word_info.get("end", 0), 2)
+                word_timings.append({
+                    "word": word,
+                    "start": start,
+                    "end": end
+                })
+
+    return word_timings
+
+
+
+
 # 🔹 테스트 실행
 # subtitles = [
 #     "코드를 작성할 때 주석을 충분히 달지 않는 실수를 종종 합니다.",
@@ -173,3 +213,23 @@ def analyze_audio_with_whisper(audio_file):
 #     "변수명을 명확하지 않게 지어서 나중에 혼란을 겪게 되죠."],
 #   "music_url": "bgm_01.mp3"
 # }
+
+
+
+# 1. 테스트할 문장
+text = "코드를 작성할 때 주석을 충분히 달지 않는 실수를 종종 합니다."
+
+# 2. TTS 생성
+tts_data = generate_tts(text)
+
+# mp3 파일로 저장
+test_audio_path = os.path.join(output_folder, "test_tts.mp3")
+with open(test_audio_path, "wb") as f:
+    f.write(tts_data)
+
+# 3. 단어별 읽는 시간 분석
+word_timings = analyze_audio_words_with_whisper(test_audio_path)
+
+# 4. 결과 출력
+for info in word_timings:
+    print(f"🗣 단어: {info['word']} | 시작: {info['start']}s | 끝: {info['end']}s | 길이: {round(info['end'] - info['start'], 2)}s")
