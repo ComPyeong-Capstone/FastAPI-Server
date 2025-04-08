@@ -15,7 +15,7 @@ class FinalVideoRequest(BaseModel):
     music_url: str
     font_path: str
     font_effect: str
-    text_color: str
+    font_color: str
     subtitle_y_position: int
 
 # 최종 비디오 생성 함수
@@ -24,16 +24,17 @@ def create_final_video(video_filenames: List[str],
                        music_url: str,
                        font_path: str,
                        font_effect: str,
-                       text_color: str,
+                       font_color: str,
                        subtitle_y_position: int):
 
     font_size = 30
     video_clips = []
     if(font_effect == "poping"):
-        video_clips = create_subtitle.create_video_with_word_subtitles(video_filenames, subtitles, font_path, font_size, text_color, subtitle_y_position)
+        tts_audio_path, durations = tts.text_to_speech(subtitles)
+        video_clips = create_subtitle.create_video_with_word_subtitles(video_filenames, subtitles, font_path, font_size, font_color, subtitle_y_position)
     elif font_effect == "split":
         tts_audio_path, durations = tts.text_to_speech(subtitles)
-        video_clips = create_subtitle.create_video_with_split_subtitles(video_filenames, subtitles, durations, font_path, font_size, text_color, subtitle_y_position)
+        video_clips = create_subtitle.create_video_with_split_subtitles(video_filenames, subtitles, durations, font_path, font_size, font_color, subtitle_y_position)
 
 
     # ✅ 모든 비디오 클립 이어 붙이기
@@ -73,7 +74,7 @@ async def generate_final_video(request: FinalVideoRequest):
         request.music_url,
         request.font_path,
         request.font_effect,
-        request.text_color,
+        request.font_color,
         request.subtitle_y_position
     )
 
