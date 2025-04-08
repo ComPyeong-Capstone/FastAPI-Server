@@ -1,3 +1,6 @@
+import os
+from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
+
 # ✅ 문장 반 나누는 자막 생성 함수
 def create_video_with_split_subtitles(video_filenames, subtitles, durations, font_path, font_size, text_color, subtitle_y_position):
     """
