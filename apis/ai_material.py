@@ -12,6 +12,7 @@ router = APIRouter()
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 STABLE_DIFFUSION_API_KEY = os.getenv("STABLE_DIFFUSION_API_KEY")
+SERVER_HOST = os.getenv("SERVER_HOST")
 
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
@@ -105,55 +106,46 @@ def generate_image_prompt(subtitles):
 # Stable Diffusion API 호출 함수
 def generate_images(subtitles):
     image_urls = []
-    max_images = 3
+    max_images = 12
 
     if not os.path.exists("images"):
         os.makedirs("images")
 
-    # ✅ 전체 문장을 번역 (무조건 실행)
-    translated_subtitles = translate_to_english(subtitles)
+    # ✅ 현재 이미지 개수 기준으로 고유 번호 시작점 계산
+    # existing_images = [f for f in os.listdir("images") if f.endswith(".jpeg")]
+    # start_index = len(existing_images)
 
-    # ✅ 이미지 프롬프트 생성
+    translated_subtitles = translate_to_english(subtitles)
     image_prompts = generate_image_prompt(translated_subtitles)
 
-    for i, prompt in enumerate(image_prompts[:max_images]):  # ✅ for 루프 추가
-
-        # ✅ API 요청
+    for i, prompt in enumerate(image_prompts[:max_images]):
         response = requests.post(
             "https://api.stability.ai/v2beta/stable-image/generate/sd3",
             headers={
                 "Authorization": f"Bearer {STABLE_DIFFUSION_API_KEY}",
-                "Accept": "image/*",  # 이미지 바이너리 데이터 받기
+                "Accept": "image/*",
             },
-            files={"none": ""},  # ✅ Multipart 형식 충족을 위해 필요
+            files={"none": ""},
             data={
                 "model": "sd3.5-large-turbo",
-                "prompt": prompt,  # ✅ 번역된 프롬프트 사용
+                "prompt": prompt,
                 "aspect_ratio": "9:16",
                 "output_format": "jpeg",
             },
         )
 
-        # ✅ 응답 확인 후 저장
         if response.status_code == 200:
-            # 고유한 파일 이름 생성
-            base_name = f"generated_image_{i}"
-            ext = ".jpeg"
-            index = 1
-            image_filename = os.path.join("images", f"{base_name}_{index}{ext}")
-            while os.path.exists(image_filename):
-                index += 1
-                image_filename = os.path.join("images", f"{base_name}_{index}{ext}")
-            # ✅ 실제 이미지 파일 저장
+            image_filename = os.path.join("images", f"generated_image_{i+1}.jpeg")
+            # unique_index = start_index + i
+            # image_filename = os.path.join("images", f"generated_image_{unique_index}.jpeg")
+
             with open(image_filename, "wb") as img_file:
                 img_file.write(response.content)
 
-            # ✅ 이미지 URL 반환용으로 수정
-            image_url = f"http://127.0.0.1:8000/{image_filename.replace(os.sep, '/')}"
+            image_url = f"http://{SERVER_HOST}:8000/{image_filename.replace(os.sep, '/')}"
             image_urls.append(image_url)
 
             print(f"✅ 이미지 저장 완료: {image_filename}")
-            
         else:
             print(f"❌ 이미지 생성 실패: {response.status_code} - {response.text}")
             image_urls.append(None)

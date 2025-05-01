@@ -13,6 +13,7 @@ router = APIRouter()
 # 환경 변수에서 API 키 로드
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 RUNWAY_API_KEY = os.getenv("RUNWAY_API_KEY")
+SERVER_HOST = os.getenv("SERVER_HOST")
 
 # Runway 클라이언트 초기화
 openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
@@ -96,14 +97,18 @@ def generate_video(image_filename: str, subtitle: str):
         # 고유한 파일 이름 생성
         base_name = f"generated_{filename_without_ext}_AI"
         ext = ".mp4"
-        i = 1
-        save_path = os.path.join("videos", f"{base_name}_{i}{ext}")
-        while os.path.exists(save_path):
-            i += 1
-            save_path = os.path.join("videos", f"{base_name}_{i}{ext}")
+
+        save_path = os.path.join("videos", f"{base_name}{ext}")
+
+        # i = 1
+        # save_path = os.path.join("videos", f"{base_name}_{i}{ext}")
+        # while os.path.exists(save_path):
+        #     i += 1
+        #     save_path = os.path.join("videos", f"{base_name}_{i}{ext}")
+        
         download_video(video_url, save_path)
 
-        return f"http://127.0.0.1:8000/{save_path}"
+        return f"http://{SERVER_HOST}:8000/{save_path}"
     else:
         print("Task failed. No video generated.")
         print("Task status info:", task_status.dict())  # 전체 상태를 보기 위해 추가
