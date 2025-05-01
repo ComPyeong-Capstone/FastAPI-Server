@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from apis import ai_material, video_partial, video_final
+from apis import ai_material, video_partial, video_final, thumbnail
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -21,6 +21,8 @@ app.mount("/images", StaticFiles(directory="images"), name="images")
 app.include_router(ai_material.router, prefix="/generate/material", tags=["AI_Image"])
 app.include_router(video_partial.router, prefix="/generate/video/partial", tags=["Video"])
 app.include_router(video_final.router, prefix="/generate/video/final", tags=["Video"])
+
+app.include_router(thumbnail.router)
 
 @app.get("/")
 async def root():
