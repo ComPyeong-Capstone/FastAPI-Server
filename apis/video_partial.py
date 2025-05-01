@@ -6,72 +6,58 @@ import os
 import requests
 import openai
 from runwayml import RunwayML  # ✅ Runway API 클라이언트 사용
+from pydantic import BaseModel
 
 router = APIRouter()
 
 # 환경 변수에서 API 키 로드
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 RUNWAY_API_KEY = os.getenv("RUNWAY_API_KEY")
+SERVER_HOST = os.getenv("SERVER_HOST")
 
 # Runway 클라이언트 초기화
 openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
 client = RunwayML(api_key=RUNWAY_API_KEY)
 
-def generate_prompt(subtitles: List[str]) -> List[str]:
-    subtitles_list = "\n".join([f"{idx+1}. {subtitle}" for idx, subtitle in enumerate(subtitles)])
+class VideoRequest(BaseModel):
+    images: List[str]
+    subtitles: List[str]
 
-    # 간단하고 명료한 영상 생성을 위한 프롬프트 생성
-    # prompt_for_gpt = f"""
-    # You are an expert at writing prompts for AI video generation from an input image.
-
-    # For each of the following subtitles, generate a short, dynamic, and cinematic prompt.  
-    # Focus on actions, emotions, and atmosphere, not background details.
-
-    # ⚠️ Return a numbered list of prompts.  
-    # ⚠️ Make sure the number of prompts matches the number of subtitles exactly, one prompt per subtitle.  
-    # Return ONLY a numbered list of prompts. No explanations.
-
-    # Subtitles:
-    # {subtitles_list}
-    # """
-
-    # 자세하고 AI스러운 영상 생성을 위한 프롬프트 생성
-    prompt_for_gpt = f"""
-    You are an expert cinematic storyteller specializing in AI-generated video prompts.  
-    Your task is to create highly dynamic, cinematic prompts for an AI video generation model, based on the following subtitles.
-
-    For each subtitle:
-    - Describe energetic and emotionally expressive human actions.  
-    - Include camera movements (slow zoom, dolly, tracking shots) and cinematic composition (close-ups, wide shots).  
-    - Set a vivid atmosphere with lighting (dramatic lighting, backlighting).  
-    - Optionally incorporate futuristic AI elements (holographic displays, augmented reality interfaces).  
-    - Keep the tone immersive, engaging, and visually stunning.  
-
-    ⚠️ Return a numbered list of prompts.  
-    ⚠️ Make sure the number of prompts matches the number of subtitles exactly, one prompt per subtitle.  
-    Return ONLY the numbered list. No explanations.
-
-    Subtitles:
-    {subtitles_list}
-    """
+# GPT에 이미지와 자막을 전달해 프롬프트 생성
+def generate_prompt_from_image_and_subtitle(image_path: str, subtitle: str) -> str:
+    with open(image_path, "rb") as f:
+        base64_image = base64.b64encode(f.read()).decode("utf-8")
 
     response = openai_client.chat.completions.create(
         model="gpt-4-turbo",
-        messages=[{"role": "user", "content": prompt_for_gpt}],
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{base64_image}"}
+                    },
+                    {
+                        "type": "text",
+                        "text": (
+                            "You are an AI prompt engineer for cinematic video generation.\n"
+                            f"Given the image above and the subtitle below, create a vivid, cinematic prompt "
+                            "for a Runway Gen-3 video. Use one or two sentences, under 50 words, describing the scene visually.\n\n"
+                            f"Subtitle: {subtitle}"
+                            f"Only respond in English."
+                        )
+                    }
+                ]
+            }
+        ],
+        max_tokens=200
     )
 
-    generated_prompt = response.choices[0].message.content.strip()
-    prompts = generated_prompt.split('\n')
-    cleaned_prompts = [
-        line.split('. ', 1)[1] if '. ' in line else line 
-        for line in prompts if line.strip() != ''
-    ]
+    prompt = response.choices[0].message.content.strip()
+    print(f"\n🖼️ Generated prompt for image + subtitle:\n{prompt}")
+    return prompt
 
-    print("✅ Generated prompts list:")
-    for idx, prompt in enumerate(cleaned_prompts):
-        print(f"{idx + 1}: {prompt}")
-
-    return cleaned_prompts
 
 # Runway API 호출 함수
 def generate_video(image_filename: str, subtitle: str):
@@ -107,10 +93,22 @@ def generate_video(image_filename: str, subtitle: str):
         print(f"Task completed successfully! Video URL: {video_url}")
 
         filename_without_ext, _ = os.path.splitext(image_filename)
-        save_path = os.path.join("videos", f"generated_{filename_without_ext}.mp4")
+
+        # 고유한 파일 이름 생성
+        base_name = f"generated_{filename_without_ext}_AI"
+        ext = ".mp4"
+
+        save_path = os.path.join("videos", f"{base_name}{ext}")
+
+        # i = 1
+        # save_path = os.path.join("videos", f"{base_name}_{i}{ext}")
+        # while os.path.exists(save_path):
+        #     i += 1
+        #     save_path = os.path.join("videos", f"{base_name}_{i}{ext}")
+        
         download_video(video_url, save_path)
 
-        return f"http://127.0.0.1:8000/{save_path}"
+        return f"http://{SERVER_HOST}:8000/{save_path}"
     else:
         print("Task failed. No video generated.")
         print("Task status info:", task_status.dict())  # 전체 상태를 보기 위해 추가
@@ -132,14 +130,14 @@ def download_video(video_url: str, save_path: str):
 
 # FastAPI 엔드포인트
 @router.post("/")
-async def generate_partial_videos(images: List[str], subtitles: List[str]):
-    prompts = generate_prompt(subtitles)
-
+async def generate_partial_videos(request: VideoRequest):
     video_urls = []
-    for image, prompt in zip(images, prompts):
-        video_url = generate_video(image, prompt)
+
+    for image_filename, subtitle in zip(request.images, request.subtitles):
+        image_path = os.path.join("images", image_filename)
+        prompt = generate_prompt_from_image_and_subtitle(image_path, subtitle)
+        video_url = generate_video(image_filename, prompt)
         video_urls.append(video_url)
 
     return {"video_urls": video_urls}
-
 # 영상 하나 약 30초

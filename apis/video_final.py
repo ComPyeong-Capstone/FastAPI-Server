@@ -24,7 +24,7 @@ def create_final_video(video_filenames: List[str], subtitles: List[str], music_u
 
     FONT_PATH = "/System/Library/Fonts/AppleSDGothicNeo.ttc"  # ✅ 한글 폰트 지원
 
-    FONT_SIZE = 30
+    FONT_SIZE = 40
     TEXT_COLOR = "white"
     TEXT_BOX_HEIGHT = 100  # 자막 높이 조절
     SUBTITLE_Y_POSITION = -150  # 하단에서 150px 위
@@ -104,10 +104,12 @@ def create_final_video(video_filenames: List[str], subtitles: List[str], music_u
     final_video_with_bgm = final_video.set_audio(combined_audio)
 
     # ✅ 최종 비디오 저장 (videos 폴더에 저장)
-    if not os.path.exists("videos"):
-        os.makedirs("videos")
-
-    output_filename = "final_video.mp4"
+    base_filename = "final_video"
+    ext = ".mp4"
+    i = 1
+    while os.path.exists(os.path.join("videos", f"{base_filename}_{i}{ext}")):
+        i += 1
+    output_filename = f"{base_filename}_{i}{ext}"
     output_path = os.path.join("videos", output_filename)
 
     final_video_with_bgm.write_videofile(output_path, codec="libx264", audio_codec="aac", preset="ultrafast")

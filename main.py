@@ -1,7 +1,12 @@
 from fastapi import FastAPI
-from apis import ai_material, video_partial, video_final
+from apis import ai_material, video_partial, video_final, thumbnail
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+SERVER_HOST = os.getenv("SERVER_HOST")
 
 app = FastAPI(title="AI Video Generation API")
 
@@ -21,6 +26,7 @@ app.mount("/images", StaticFiles(directory="images"), name="images")
 app.include_router(ai_material.router, prefix="/generate/material", tags=["AI_Image"])
 app.include_router(video_partial.router, prefix="/generate/video/partial", tags=["Video"])
 app.include_router(video_final.router, prefix="/generate/video/final", tags=["Video"])
+app.include_router(thumbnail.router)
 
 @app.get("/")
 async def root():
@@ -28,4 +34,4 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host=SERVER_HOST, port=8000, reload=True)
