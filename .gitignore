@@ -5,3 +5,4 @@ images/
 videos/
 music/
 .DS_Store
+fastapi.log
