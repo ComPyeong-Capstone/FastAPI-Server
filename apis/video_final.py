@@ -50,6 +50,10 @@ def create_final_video(video_filenames: List[str],
     # ✅ 두 오디오를 합침
     combined_audio = CompositeAudioClip([bgm_audio, tts_audio]).set_duration(final_video.duration)
 
+     # ✅ 임시 TTS 파일 삭제
+    if os.path.exists(tts_audio_path):
+        os.remove(tts_audio_path)
+
     # ✅ 최종 오디오 삽입
     final_video_with_bgm = final_video.set_audio(combined_audio)
 
