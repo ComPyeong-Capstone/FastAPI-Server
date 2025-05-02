@@ -6,85 +6,35 @@ from pydantic import BaseModel
 from moviepy.editor import CompositeAudioClip
 from moviepy.editor import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip, AudioFileClip
 from apis import googleTTS as tts
-
+from apis import create_subtitle
 router = APIRouter()
 
 class FinalVideoRequest(BaseModel):
     videos: List[str]
     subtitles: List[str]
     music_url: str
+    font_path: str
+    font_effect: str
+    font_color: str
+    subtitle_y_position: int
 
 # 최종 비디오 생성 함수
-def create_final_video(video_filenames: List[str], subtitles: List[str], music_url: str):
+def create_final_video(video_filenames: List[str], 
+                       subtitles: List[str], 
+                       music_url: str,
+                       font_path: str,
+                       font_effect: str,
+                       font_color: str,
+                       subtitle_y_position: int):
+
+    font_size = 30
     video_clips = []
-
-    tts_audio_path, durations = tts.text_to_speech(subtitles)
-    # durations = tts.analyze_audio_with_whisper(tts_audio_path)  # 각 자막 구간의 duration 배열 반환
-
-
-    FONT_PATH = "/System/Library/Fonts/AppleSDGothicNeo.ttc"  # ✅ 한글 폰트 지원
-
-    FONT_SIZE = 40
-    TEXT_COLOR = "white"
-    TEXT_BOX_HEIGHT = 100  # 자막 높이 조절
-    SUBTITLE_Y_POSITION = -150  # 하단에서 150px 위
-
-    # 비디오 다운로드 및 VideoFileClip 변환
-    for idx, video_filename in enumerate(video_filenames):
-        video_path = os.path.join("videos", video_filename)
-
-        if not os.path.exists(video_path):
-            raise FileNotFoundError(f"{video_path} 파일이 존재하지 않습니다.")
-        
-        # 비디오 클립 생성
-        clip = VideoFileClip(video_path)
-
-        # ✅ 자막 절반으로 나누기 작업 시작
-        subtitle_text = subtitles[idx]
-        words = subtitle_text.strip().split()
-        half = (len(words)+1) // 2
-        # if len(words) % 2 != 0:
-        #     half += 1  # ✅ 홀수일 경우 앞 부분이 더 짧도록 조정
-
-        first_sub = " ".join(words[:half])  # ✅ 첫 번째 절반 자막
-        second_sub = " ".join(words[half:])  # ✅ 두 번째 절반 자막
-
-        # ✅ 해당 클립에 맞는 duration 가져오기
-        duration = durations[idx]
-
-        # ✅ 첫 번째 자막 클립 생성
-        first_subtitle = (
-            TextClip(
-                first_sub,
-                fontsize=FONT_SIZE,
-                color=TEXT_COLOR,
-                font=FONT_PATH,
-                size=(clip.w, TEXT_BOX_HEIGHT + 50),
-                method='caption'
-            )
-            .set_position(("center", clip.h + SUBTITLE_Y_POSITION))
-            .set_start(0)
-            .set_duration(duration)
-        )
-
-        # ✅ 두 번째 자막 클립 생성 (duration 지점부터 시작)
-        second_subtitle = (
-            TextClip(
-                second_sub,
-                fontsize=FONT_SIZE,
-                color=TEXT_COLOR,
-                font=FONT_PATH,
-                size=(clip.w, TEXT_BOX_HEIGHT + 50),
-                method='caption'
-            )
-            .set_position(("center", clip.h + SUBTITLE_Y_POSITION))
-            .set_start(duration)
-            .set_duration(clip.duration - duration)
-        )
-
-        # ✅ 두 자막을 클립과 합성
-        video_with_subtitles = CompositeVideoClip([clip, first_subtitle, second_subtitle])
-        video_clips.append(video_with_subtitles)
+    if(font_effect == "poping"):
+        tts_audio_path, durations = tts.text_to_speech_with_poping(subtitles)
+        video_clips = create_subtitle.create_video_with_word_subtitles(video_filenames, subtitles, durations,font_path, font_size, font_color, subtitle_y_position)
+    elif font_effect == "split":
+        tts_audio_path, durations = tts.text_to_speech(subtitles)
+        video_clips = create_subtitle.create_video_with_split_subtitles(video_filenames, subtitles, durations, font_path, font_size, font_color, subtitle_y_position)
 
 
     # ✅ 모든 비디오 클립 이어 붙이기
@@ -123,7 +73,11 @@ async def generate_final_video(request: FinalVideoRequest):
     final_video = create_final_video(
         request.videos,
         request.subtitles,
-        request.music_url
+        request.music_url,
+        request.font_path,
+        request.font_effect,
+        request.font_color,
+        request.subtitle_y_position
     )
 
     final_video_path = f"http://127.0.0.1:8000/videos/{final_video}"

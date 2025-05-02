@@ -130,6 +130,69 @@ def text_to_speech(text_list):
     return output_file, front_durations
 
 
+def text_to_speech_with_poping(text_list):
+    """
+    텍스트 리스트를 받아 TTS 오디오 파일 생성 + 단어별 타이밍 분석 (poping 스타일)
+    반환: (TTS 파일 경로, 모든 단어 타이밍 리스트)
+    """
+    if not isinstance(text_list, list):
+        raise ValueError("입력은 리스트 형식이어야 합니다.")
+
+    combined_audio = AudioSegment.silent(duration=0)
+    start_time = 0
+    interval = 5000
+    all_word_timings = []  # 🔥 모든 단어들의 타이밍 정보 저장할 리스트
+
+    for idx, text in enumerate(text_list):
+        # 전체 문장 TTS 생성
+        tts_data = generate_tts(text)
+        merged_temp_path = os.path.join(output_folder, f"temp_merged_{idx}.mp3")
+        with open(merged_temp_path, "wb") as f:
+            f.write(tts_data)
+
+        tts_audio = AudioSegment.from_mp3(merged_temp_path)
+
+        # 무음 간격 맞추기
+        silent_gap = AudioSegment.silent(duration=max(0, start_time - len(combined_audio)))
+        if start_time >= 5000:
+            silent_gap += AudioSegment.silent(duration=500)
+
+        # 오디오 합치기
+        combined_audio += silent_gap + tts_audio
+        start_time += interval
+
+        # 🔥 단어별 타이밍 분석
+        word_timings = analyze_audio_words_with_whisper(merged_temp_path)
+
+        # 👉 수정: 각 단어의 start, end에 "start_time"을 더해줘야 한다
+        adjusted_word_timings = []
+        for w in word_timings:
+            adjusted_word_timings.append({
+            "word": w["word"],
+            "start": round(w["start"] + start_time, 2),   # ✅ 문장 시작시간 보정
+            "end": round(w["end"] + start_time, 2)
+            })
+
+        all_word_timings.append(word_timings)
+
+        os.remove(merged_temp_path)
+
+    # 전체 길이를 5초 단위로 맞추기
+    final_length_ms = ((len(combined_audio) + 4999) // 5000) * 5000
+    if len(combined_audio) < final_length_ms:
+        padding_duration = final_length_ms - len(combined_audio)
+        combined_audio += AudioSegment.silent(duration=padding_duration)
+
+    # 최종 파일 저장
+    output_file = os.path.join(output_folder, get_next_filename())
+    combined_audio.export(output_file, format="mp3")
+    print(f"✅ Poping 스타일 TTS 음성 파일이 생성되었습니다: {output_file}")
+
+    # 파일 경로와 단어 타이밍 배열 반환
+    return output_file, all_word_timings
+
+
+
 # Whisper 모델을 통해 오디오의 앞부분 duration과 각 타이밍을 분석하고 출력하는 함수
 def analyze_audio_with_whisper(audio_file):
     model = whisper.load_model("medium")
@@ -145,6 +208,46 @@ def analyze_audio_with_whisper(audio_file):
     first_segment = result["segments"][0]
     duration = round(first_segment["end"] - first_segment["start"], 2)
     return duration
+
+
+
+def analyze_audio_words_with_whisper(audio_file):
+    """
+    🔍 주어진 오디오 파일을 Whisper로 분석해서
+    단어 단위 (word-level)로 (단어, 시작시간, 끝시간) 정보를 리스트로 반환하는 함수.
+
+    Args:
+        audio_file (str): 분석할 오디오 파일 경로 (.mp3)
+
+    Returns:
+        List[dict]: 각 단어별 정보 리스트
+            예: [{"word": "Hello", "start": 0.5, "end": 0.8}, ...]
+    """
+
+    # Whisper 모델 로드 (medium 모델 사용)
+    model = whisper.load_model("medium")
+
+    # 오디오를 word timestamps 옵션을 켜고 변환
+    result = model.transcribe(audio_file, word_timestamps=True)
+
+    word_timings = []
+
+    # Whisper 결과 중 segments를 순회
+    for segment in result["segments"]:
+        if "words" in segment:
+            for word_info in segment["words"]:
+                word = word_info.get("word", "").strip()
+                start = round(word_info.get("start", 0), 2)
+                end = round(word_info.get("end", 0), 2)
+                word_timings.append({
+                    "word": word,
+                    "start": start,
+                    "end": end
+                })
+
+    return word_timings
+
+
 
 
 # 🔹 테스트 실행
@@ -173,3 +276,23 @@ def analyze_audio_with_whisper(audio_file):
 #     "변수명을 명확하지 않게 지어서 나중에 혼란을 겪게 되죠."],
 #   "music_url": "bgm_01.mp3"
 # }
+
+
+
+# 1. 테스트할 문장
+# text = "코드를 작성할 때 주석을 충분히 달지 않는 실수를 종종 합니다."
+
+# # 2. TTS 생성
+# tts_data = generate_tts(text)
+
+# # mp3 파일로 저장
+# test_audio_path = os.path.join(output_folder, "test_tts.mp3")
+# with open(test_audio_path, "wb") as f:
+#     f.write(tts_data)
+
+# # 3. 단어별 읽는 시간 분석
+# word_timings = analyze_audio_words_with_whisper(test_audio_path)
+
+# # 4. 결과 출력
+# for info in word_timings:
+#     print(f"🗣 단어: {info['word']} | 시작: {info['start']}s | 끝: {info['end']}s | 길이: {round(info['end'] - info['start'], 2)}s")
