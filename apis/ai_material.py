@@ -156,7 +156,8 @@ def generate_images(subtitles):
 @router.post("/")
 async def generate_material(request: MaterialRequest):
     print("\n🚀 OpenAI 대본 생성 시작!")
-    subtitles = generate_script(request.title, request.duration)
+    #subtitles = generate_script(request.title, request.duration)
+    subtitles = request.titles
 
     print("\n✅ 생성된 대본:", subtitles)  # 🚀 OpenAI에서 받은 대본 확인
 
