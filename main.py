@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from apis import ai_material, video_partial, video_final, thumbnail
+from apis import ai_material, video_partial, video_final, thumbnail, image_partial
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -27,6 +27,7 @@ app.include_router(ai_material.router, prefix="/generate/material", tags=["AI_Im
 app.include_router(video_partial.router, prefix="/generate/video/partial", tags=["Video"])
 app.include_router(video_final.router, prefix="/generate/video/final", tags=["Video"])
 app.include_router(thumbnail.router)
+app.include_router(image_partial.router, prefix="/generate/material", tags=["AI_Image"])
 
 @app.get("/")
 async def root():

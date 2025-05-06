@@ -23,6 +23,11 @@ class VideoRequest(BaseModel):
     images: List[str]
     subtitles: List[str]
 
+class SingleVideoRequest(BaseModel):
+    image: str
+    subtitle: str
+    number: int
+
 # GPT에 이미지와 자막을 전달해 프롬프트 생성
 def generate_prompt_from_image_and_subtitle(image_path: str, subtitle: str) -> str:
     with open(image_path, "rb") as f:
@@ -60,7 +65,7 @@ def generate_prompt_from_image_and_subtitle(image_path: str, subtitle: str) -> s
 
 
 # Runway API 호출 함수
-def generate_video(image_filename: str, subtitle: str):
+def generate_video(image_filename: str, subtitle: str, number: int = None):
     # 이미지 파일을 Base64로 인코딩
     image_path = os.path.join("images", image_filename)
     with open(image_path, "rb") as f:
@@ -92,10 +97,13 @@ def generate_video(image_filename: str, subtitle: str):
         video_url = task_status.output[0]
         print(f"Task completed successfully! Video URL: {video_url}")
 
-        filename_without_ext, _ = os.path.splitext(image_filename)
+        if number is not None:
+            base_name = f"generated_video_{number}"
+        else:
+            filename_without_ext, _ = os.path.splitext(image_filename)
+            base_name = f"generated_{filename_without_ext}_AI"
 
-        # 고유한 파일 이름 생성
-        base_name = f"generated_{filename_without_ext}_AI"
+        save_path = os.path.join("videos", f"{base_name}.mp4")
         ext = ".mp4"
 
         save_path = os.path.join("videos", f"{base_name}{ext}")
@@ -141,3 +149,10 @@ async def generate_partial_videos(request: VideoRequest):
 
     return {"video_urls": video_urls}
 # 영상 하나 약 30초
+
+@router.post("/single")
+async def generate_single_video(request: SingleVideoRequest):
+    image_path = os.path.join("images", request.image)
+    prompt = generate_prompt_from_image_and_subtitle(image_path, request.subtitle)
+    video_url = generate_video(request.image, prompt, request.number)
+    return {"video_url": video_url}

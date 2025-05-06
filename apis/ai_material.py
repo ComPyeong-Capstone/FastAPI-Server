@@ -18,8 +18,7 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 # ✅ 요청 데이터 모델 정의
 class MaterialRequest(BaseModel):
-    #title: str
-    titles: List[str]
+    title: str
     duration: int
 
 # OpenAI API 호출 함수
@@ -157,9 +156,8 @@ def generate_images(subtitles):
 @router.post("/")
 async def generate_material(request: MaterialRequest):
     print("\n🚀 OpenAI 대본 생성 시작!")
-    #subtitles = generate_script(request.title, request.duration)
-    subtitles = request.titles
-
+    subtitles = generate_script(request.title, request.duration)
+    
     print("\n✅ 생성된 대본:", subtitles)  # 🚀 OpenAI에서 받은 대본 확인
 
     image_urls = []
