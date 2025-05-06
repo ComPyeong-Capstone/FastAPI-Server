@@ -173,7 +173,7 @@ def text_to_speech_with_poping(text_list):
             "end": round(w["end"] + start_time, 2)
             })
 
-        all_word_timings.append(adjusted_word_timings)
+        all_word_timings.append(word_timings)
 
         os.remove(merged_temp_path)
 
