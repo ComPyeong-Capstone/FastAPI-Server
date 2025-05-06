@@ -123,7 +123,7 @@ def create_video_with_word_subtitles(video_filenames, subtitles, word_timings_li
 
 # 사용자 입력 자막과 whisper모듈이 분석한 자막이 서로 맞지 않아 인덱스 차이와 맞춤법 차이가 발생
 #아래 함수 추가하여 tts가 단어를 읽은 시간을 가져오고 자막은 사용자가 입력한 것으로 치환
-#아직 싱크가 정확히 맞지도 않고 시간이 너무 길게 뽑힘 테스트 결과 54초 오차범위 2초
+#아직 싱크가 정확히 맞지도 않고 시간이 너무 길게 뽑힘 테스트 결과 54초 오차범위 2초 -> 오래걸리는 이유는 whisper 모델이 커서. 작은 모델 사용하면 10초 내외
 def align_words_with_timings_split(subtitle_words, whisper_words):
     """
     Whisper 단어 구간에 여러 자막 단어가 매핑될 경우 시간 분배 방식으로 정렬
