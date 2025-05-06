@@ -1,7 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from apis import ai_material, video_partial, video_final, thumbnail, image_partial
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
 from dotenv import load_dotenv
 import os
 
@@ -9,6 +11,7 @@ load_dotenv()
 SERVER_HOST = os.getenv("SERVER_HOST")
 
 app = FastAPI(title="AI Video Generation API")
+templates = Jinja2Templates(directory="templates")
 
 # CORS 설정 (프론트엔드에서 API 호출 가능하도록)
 app.add_middleware(
@@ -32,6 +35,16 @@ app.include_router(image_partial.router, prefix="/generate/material", tags=["AI_
 @app.get("/")
 async def root():
     return {"message": "Welcome to AI Video Generation API"}
+
+@app.get("/login", response_class=HTMLResponse)
+async def serve_login_page(request: Request):
+    return templates.TemplateResponse("login.html", {
+        "request": request,
+        "google_client_id": os.getenv("GOOGLE_CLIENT_ID"),
+        "kakao_js_key": os.getenv("KAKAO_JS_KEY"),
+        "kakao_rest_api_key": os.getenv("KAKAO_REST_API_KEY"),
+        "kakao_redirect_uri": os.getenv("KAKAO_REDIRECT_URI"),
+    })
 
 if __name__ == "__main__":
     import uvicorn
