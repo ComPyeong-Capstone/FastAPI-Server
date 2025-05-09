@@ -139,12 +139,12 @@ def text_to_speech_with_poping(text_list):
         raise ValueError("입력은 리스트 형식이어야 합니다.")
 
     combined_audio = AudioSegment.silent(duration=0)
-    start_time = 0
-    interval = 5000
-    all_word_timings = []  # 🔥 모든 단어들의 타이밍 정보 저장할 리스트
+    start_time = 0  # milliseconds
+    interval = 5000  # 5초 간격
+    all_word_timings = []
 
     for idx, text in enumerate(text_list):
-        # 전체 문장 TTS 생성
+        # TTS 생성
         tts_data = generate_tts(text)
         merged_temp_path = os.path.join(output_folder, f"temp_merged_{idx}.mp3")
         with open(merged_temp_path, "wb") as f:
@@ -152,43 +152,46 @@ def text_to_speech_with_poping(text_list):
 
         tts_audio = AudioSegment.from_mp3(merged_temp_path)
 
-        # 무음 간격 맞추기
+        # Whisper 분석
+        word_timings = analyze_audio_words_with_whisper(merged_temp_path)
+
+        # 🔧 start_time 보정은 오디오 결합 전에 적용해야 정확
+        adjusted_word_timings = []
+        for w in word_timings:
+            adjusted_word_timings.append({
+                "word": w["word"],
+                "start": round(w["start"] + start_time / 1000, 2),
+                "end": round(w["end"] + start_time / 1000, 2)
+            })
+
+        all_word_timings.append(adjusted_word_timings)
+
+        # 디버깅 출력
+        print(f"\n🧾 [인덱스 {idx}] 보정된 단어 타이밍:")
+        for word_info in adjusted_word_timings:
+            print(f"🗣 {word_info['word']} | ⏱ {word_info['start']}s ~ {word_info['end']}s | 길이: {round(word_info['end'] - word_info['start'], 2)}s")
+
+        # 무음 gap 삽입
         silent_gap = AudioSegment.silent(duration=max(0, start_time - len(combined_audio)))
         if start_time >= 5000:
             silent_gap += AudioSegment.silent(duration=500)
 
-        # 오디오 합치기
         combined_audio += silent_gap + tts_audio
+
+        # start_time 갱신은 마지막에!
         start_time += interval
-
-        # 🔥 단어별 타이밍 분석
-        word_timings = analyze_audio_words_with_whisper(merged_temp_path)
-
-        # 👉 수정: 각 단어의 start, end에 "start_time"을 더해줘야 한다
-        adjusted_word_timings = []
-        for w in word_timings:
-            adjusted_word_timings.append({
-            "word": w["word"],
-            "start": round(w["start"] + start_time, 2),   # ✅ 문장 시작시간 보정
-            "end": round(w["end"] + start_time, 2)
-            })
-
-        all_word_timings.append(word_timings)
 
         os.remove(merged_temp_path)
 
-    # 전체 길이를 5초 단위로 맞추기
+    # 최종 길이 정리
     final_length_ms = ((len(combined_audio) + 4999) // 5000) * 5000
     if len(combined_audio) < final_length_ms:
-        padding_duration = final_length_ms - len(combined_audio)
-        combined_audio += AudioSegment.silent(duration=padding_duration)
+        combined_audio += AudioSegment.silent(duration=final_length_ms - len(combined_audio))
 
-    # 최종 파일 저장
     output_file = os.path.join(output_folder, get_next_filename())
     combined_audio.export(output_file, format="mp3")
     print(f"✅ Poping 스타일 TTS 음성 파일이 생성되었습니다: {output_file}")
 
-    # 파일 경로와 단어 타이밍 배열 반환
     return output_file, all_word_timings
 
 
