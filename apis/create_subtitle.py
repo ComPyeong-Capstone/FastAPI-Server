@@ -66,6 +66,7 @@ def create_video_with_word_subtitles(video_filenames, subtitles, word_timings_li
     단어별로 튀어나오는 애니메이션 자막을 입힌 비디오 클립 리스트를 반환하는 함수.
     """
     video_clips = []
+    interval = 5  # 각 클립의 예상 재생 시간 간격 (초 단위) — TTS 기준
 
     for idx, video_filename in enumerate(video_filenames):
         video_path = os.path.join("videos", video_filename)
@@ -75,30 +76,33 @@ def create_video_with_word_subtitles(video_filenames, subtitles, word_timings_li
 
         clip = VideoFileClip(video_path)
 
-        # 🟡 자막 텍스트 단어 리스트 (사용자가 입력한 문장 기준)
         subtitle_text = subtitles[idx]
         subtitle_words = subtitle_text.strip().split()
-
-        # 🟠 Whisper 결과 타이밍 (raw)
         whisper_word_timings = word_timings_list[idx]
 
-        # ✅ 여기서 align_words_with_timings_split() 함수 적용
+        # 🟡 전체 TTS 오디오 기준의 자막 시간을, 현재 영상 기준으로 변환
+        clip_start_time = idx * interval  # 초 단위 오프셋
         aligned_word_timings = align_words_with_timings_split(subtitle_words, whisper_word_timings)
-
-
-        # 🔥 단어별 타이밍 가져오기
-        # word_timings = word_timings_list[idx]
-
-        # ✅ 디버그 출력 
-        print(f"\n🎯 [비디오 인덱스 {idx}]")
-        print(f"🟠 word_timings (Whisper 결과): {[w['word'] for w in aligned_word_timings]}")
+        merged_word_timings = merge_short_words(aligned_word_timings)
 
         word_clips = []
 
-        for word_info in aligned_word_timings:#word_timings:
-            word = word_info["word"]  # Whisper에서 받아온 단어
-            start_time = word_info["start"]
-            duration = round(word_info["end"] - word_info["start"], 2)
+        for word_info in aligned_word_timings: # 쓸거면 aligned_word_timings 말고 merged_word_timings 넣기
+            word = word_info["word"]
+            global_start = word_info["start"]
+            global_end = word_info["end"]
+
+            # 🟢 클립 로컬 시간으로 변환
+            local_start = round(global_start - clip_start_time, 2)
+            local_end = round(global_end - clip_start_time, 2)
+            duration = round(local_end - local_start, 2)
+
+            # 🛡️ 잘못된 시간 필터링
+            if local_start < 0 or local_start >= clip.duration:
+                continue
+            if local_end > clip.duration:
+                local_end = clip.duration
+                duration = round(local_end - local_start, 2)
 
             txt = TextClip(
                 word,
@@ -110,14 +114,60 @@ def create_video_with_word_subtitles(video_filenames, subtitles, word_timings_li
             ).set_position(("center", clip.h + subtitle_y_position))
 
             pop = txt.resize(lambda t: 0.3 + 0.7 * (t / 0.2) if t < 0.2 else 1)
-
-            pop = pop.set_start(start_time).set_duration(duration)
+            pop = pop.set_start(local_start).set_duration(duration)
             word_clips.append(pop)
 
-        video_with_word_subtitles = CompositeVideoClip([clip] + word_clips)
+        # 🧩 자막 + 영상 클립 합치기 (자막이 영상보다 길지 않게)
+        video_with_word_subtitles = CompositeVideoClip([clip] + word_clips).set_duration(clip.duration)
         video_clips.append(video_with_word_subtitles)
 
     return video_clips
+
+
+def merge_short_words(word_timings):
+    """
+    Whisper 분석 결과에서 단어가 짧을 경우(6자 이하), 다음 단어와 자막을 병합해 자연스럽게 출력되도록 정리.
+
+    Args:
+        word_timings (List[dict]): 단어 단위 Whisper 결과
+            예: [{"word": "할", "start": 0.0, "end": 0.3}, ...]
+
+    Returns:
+        List[dict]: 병합된 자막 리스트
+            예: [{"word": "할 수", "start": 0.0, "end": 0.6}, ...]
+    """
+    merged = []
+    i = 0
+
+    while i < len(word_timings):
+        current = word_timings[i]
+        current_word = current["word"].strip()
+        current_len = len(current_word)
+
+        # 마지막 단어거나 다음 단어가 없음
+        if i == len(word_timings) - 1:
+            merged.append(current)
+            break
+
+        next_word = word_timings[i + 1]["word"].strip()
+        next_len = len(next_word)
+
+        # 두 단어 모두 6글자 이하 → 병합
+        if current_len <= 6 and next_len <= 6:
+            merged_word = f"{current_word} {next_word}"
+            merged_clip = {
+                "word": merged_word,
+                "start": current["start"],
+                "end": word_timings[i + 1]["end"]
+            }
+            merged.append(merged_clip)
+            i += 2  # 두 단어 건너뛰기
+        else:
+            # 병합하지 않고 그대로
+            merged.append(current)
+            i += 1
+
+    return merged
 
 
 
