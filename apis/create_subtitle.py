@@ -87,10 +87,16 @@ def create_video_with_word_subtitles(video_filenames, subtitles, word_timings_li
 
         word_clips = []
 
-        for word_info in aligned_word_timings: # 쓸거면 aligned_word_timings 말고 merged_word_timings 넣기
+        for idx_word, word_info in enumerate(aligned_word_timings):
             word = word_info["word"]
             global_start = word_info["start"]
-            global_end = word_info["end"]
+
+            # 다음 단어가 있다면, 그 단어의 시작 시간까지 지속
+            if idx_word < len(aligned_word_timings) - 1:
+                global_end = aligned_word_timings[idx_word + 1]["start"]
+            else:
+                # 마지막 단어는 영상 끝까지
+                global_end = clip.duration + clip_start_time
 
             # 🟢 클립 로컬 시간으로 변환
             local_start = round(global_start - clip_start_time, 2)
