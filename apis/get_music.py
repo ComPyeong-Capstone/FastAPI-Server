@@ -7,9 +7,9 @@ router = APIRouter()
 load_dotenv()
 SERVER_HOST = os.getenv("SERVER_HOST")
 
-@router.get("/music/previews")
+@router.get("/previews")
 async def list_preview_music():
-    base_url = "http://{SERVER_HOST}:8000/music"
+    base_url = f"http://{SERVER_HOST}:8000/music"
     previews = [
         {"title": "딸기맛 사이다", "url": f"{base_url}/bgm_01.mp3"},
         # {"title": "Ambient Texture", "url": f"{base_url}/preview2.mp3"},
