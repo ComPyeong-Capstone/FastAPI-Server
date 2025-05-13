@@ -1,12 +1,13 @@
 import time
 import base64
-from fastapi import APIRouter
+from fastapi import APIRouter, UploadFile, File, Form
 from typing import List
 import os
 import requests
 import openai
 from runwayml import RunwayML  # ✅ Runway API 클라이언트 사용
 from pydantic import BaseModel
+import shutil
 
 router = APIRouter()
 
@@ -156,3 +157,26 @@ async def generate_single_video(request: SingleVideoRequest):
     prompt = generate_prompt_from_image_and_subtitle(image_path, request.subtitle)
     video_url = generate_video(request.image, prompt, request.number)
     return {"video_url": video_url}
+
+@router.post("/upload-images")
+async def upload_images_and_generate(
+    subtitles: List[str] = Form(...),
+    files: List[UploadFile] = File(...)
+):
+
+    video_urls = []
+
+    for idx, (file, subtitle) in enumerate(zip(files, subtitles), start=1):
+        ext = os.path.splitext(file.filename)[-1]
+        filename = f"user_image_{idx}{ext}"
+        image_path = os.path.join("images", filename)
+
+        with open(image_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        prompt = generate_prompt_from_image_and_subtitle(image_path, subtitle)
+        video_url = generate_video(filename, prompt, idx)
+
+        video_urls.append(video_url)
+
+    return {"video_urls": video_urls}

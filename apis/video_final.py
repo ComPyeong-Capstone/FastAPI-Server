@@ -7,7 +7,11 @@ from moviepy.editor import CompositeAudioClip
 from moviepy.editor import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip, AudioFileClip
 from apis import googleTTS as tts
 from apis import create_subtitle
+from dotenv import load_dotenv
+
 router = APIRouter()
+load_dotenv()
+SERVER_HOST = os.getenv("SERVER_HOST")
 
 class FinalVideoRequest(BaseModel):
     videos: List[str]
@@ -84,5 +88,5 @@ async def generate_final_video(request: FinalVideoRequest):
         request.subtitle_y_position
     )
 
-    final_video_path = f"http://127.0.0.1:8000/videos/{final_video}"
+    final_video_path = f"http://{SERVER_HOST}/videos/{final_video}"
     return {"final_video_url": final_video_path}
