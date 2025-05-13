@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request
-from apis import ai_material, video_partial, video_final, thumbnail, image_partial
+from apis import ai_material, video_partial, video_final, thumbnail, image_partial, get_music
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -24,6 +24,7 @@ app.add_middleware(
 
 app.mount("/videos", StaticFiles(directory="videos"), name="videos")
 app.mount("/images", StaticFiles(directory="images"), name="images")
+app.mount("/music", StaticFiles(directory="music"), name="music")
 
 # API 라우터 등록
 app.include_router(ai_material.router, prefix="/generate/material", tags=["AI_Image"])
@@ -31,6 +32,7 @@ app.include_router(video_partial.router, prefix="/generate/video/partial", tags=
 app.include_router(video_final.router, prefix="/generate/video/final", tags=["Video"])
 app.include_router(thumbnail.router)
 app.include_router(image_partial.router, prefix="/generate/material", tags=["AI_Image"])
+app.include_router(get_music.router, tags=["Music"]) 
 
 @app.get("/")
 async def root():
