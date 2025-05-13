@@ -31,7 +31,7 @@ def create_final_video(video_filenames: List[str],
                        font_color: str,
                        subtitle_y_position: int):
 
-    font_size = 30
+    font_size = 40
     video_clips = []
     if(font_effect == "poping"):
         tts_audio_path, durations = tts.text_to_speech_with_poping(subtitles)
