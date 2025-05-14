@@ -62,48 +62,48 @@ def create_video_with_split_subtitles(video_filenames, subtitles, durations, fon
 # ✅ 단어별로 튀어나오는 자막 생성 함수
 def create_video_with_word_subtitles(video_filenames, subtitles, word_timings_list, font_path, font_size, text_color, subtitle_y_position):
     """
-    비디오 파일들과 Whisper로 분석한 단어별 타이밍 리스트를 받아
-    단어별로 튀어나오는 애니메이션 자막을 입힌 비디오 클립 리스트를 반환하는 함수.
+    자연스럽게 병합된 단어 자막을 영상에 입히는 함수
     """
     video_clips = []
-    interval = 5  # 각 클립의 예상 재생 시간 간격 (초 단위) — TTS 기준
+    interval = 5  # 각 영상 시작 시간 (초 단위 오프셋)
 
     for idx, video_filename in enumerate(video_filenames):
         video_path = os.path.join("videos", video_filename)
-
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"{video_path} 파일이 존재하지 않습니다.")
 
         clip = VideoFileClip(video_path)
-
-        subtitle_text = subtitles[idx]
-        subtitle_words = subtitle_text.strip().split()
+        subtitle_text = subtitles[idx].strip()
+        subtitle_words = subtitle_text.split()
         whisper_word_timings = word_timings_list[idx]
 
-        # 🟡 전체 TTS 오디오 기준의 자막 시간을, 현재 영상 기준으로 변환
-        clip_start_time = idx * interval  # 초 단위 오프셋
+        # 1. Whisper-자막 정렬
         aligned_word_timings = align_words_with_timings_split(subtitle_words, whisper_word_timings)
-        merged_word_timings = merge_short_words(aligned_word_timings)
 
+        # 2. 자연스럽게 병합
+        merged_word_timings = merge_natural_korean_phrases(aligned_word_timings)
+
+        print(f"\n🧾 [인덱스 {idx}] 병합 전 단어 리스트:")
+        for w in aligned_word_timings:
+            print(f" - {w['word']} | {w['start']} ~ {w['end']}")
+
+        print(f"\n🧾 [인덱스 {idx}] 병합 후 자막 리스트:")
+        for w in merged_word_timings:
+            print(f"📝 {w['word']} | {w['start']} ~ {w['end']}")
+
+
+        # 3. 자막 클립 생성
+        clip_start_time = idx * interval
         word_clips = []
 
-        for idx_word, word_info in enumerate(aligned_word_timings):
-            word = word_info["word"]
+        for word_info in merged_word_timings:
             global_start = word_info["start"]
-
-            # 다음 단어가 있다면, 그 단어의 시작 시간까지 지속
-            if idx_word < len(aligned_word_timings) - 1:
-                global_end = aligned_word_timings[idx_word + 1]["start"]
-            else:
-                # 마지막 단어는 영상 끝까지
-                global_end = clip.duration + clip_start_time
-
-            # 🟢 클립 로컬 시간으로 변환
+            global_end = word_info["end"]
             local_start = round(global_start - clip_start_time, 2)
             local_end = round(global_end - clip_start_time, 2)
             duration = round(local_end - local_start, 2)
 
-            # 🛡️ 잘못된 시간 필터링
+            # 영상 범위 벗어난 자막 제거
             if local_start < 0 or local_start >= clip.duration:
                 continue
             if local_end > clip.duration:
@@ -111,7 +111,7 @@ def create_video_with_word_subtitles(video_filenames, subtitles, word_timings_li
                 duration = round(local_end - local_start, 2)
 
             txt = TextClip(
-                word,
+                word_info["word"],
                 fontsize=font_size,
                 color=text_color,
                 font=font_path,
@@ -123,12 +123,11 @@ def create_video_with_word_subtitles(video_filenames, subtitles, word_timings_li
             pop = pop.set_start(local_start).set_duration(duration)
             word_clips.append(pop)
 
-        # 🧩 자막 + 영상 클립 합치기 (자막이 영상보다 길지 않게)
-        video_with_word_subtitles = CompositeVideoClip([clip] + word_clips).set_duration(clip.duration)
-        video_clips.append(video_with_word_subtitles)
+        # 영상 + 자막 합성
+        final = CompositeVideoClip([clip] + word_clips).set_duration(clip.duration)
+        video_clips.append(final)
 
     return video_clips
-
 
 def merge_short_words(word_timings):
     """
@@ -174,6 +173,55 @@ def merge_short_words(word_timings):
             i += 1
 
     return merged
+
+
+def merge_natural_korean_phrases(word_timings):
+    """
+    자연스러운 의미 단위로 자막 병합 (조사 끝 단어 병합 금지, 조사 단어는 앞 단어에 병합)
+    """
+    merged = []
+    i = 0
+    josa_list = ["을", "를", "이", "가", "은", "는", "에", "에서", "으로", "와", "과", "도", "만", "부터", "까지", "처럼", "보다"]
+
+    while i < len(word_timings):
+        current = word_timings[i]
+        curr_word = current["word"].strip()
+
+        if i == len(word_timings) - 1:
+            merged.append(current)
+            break
+
+        next_word_obj = word_timings[i + 1]
+        next_word = next_word_obj["word"].strip()
+
+        def should_merge(prev, curr):
+            # 쉼표 있는 단어는 병합 금지
+            if "," in prev or "," in curr:
+                return False
+            # 앞 단어가 조사로 끝나는 경우 병합 금지
+            if any(prev.endswith(josa) for josa in josa_list):
+                return False
+            # 뒷 단어가 조사 하나면 병합 (예: "을")
+            if curr in josa_list:
+                return True
+            # 둘 다 짧은 단어면 병합 허용
+            if len(prev) <= 6 and len(curr) <= 6:
+                return True
+            return False
+
+        if should_merge(curr_word, next_word):
+            merged.append({
+                "word": f"{curr_word} {next_word}",
+                "start": current["start"],
+                "end": next_word_obj["end"]
+            })
+            i += 2
+        else:
+            merged.append(current)
+            i += 1
+
+    return merged
+
 
 
 
