@@ -24,7 +24,7 @@ class FinalVideoRequest(BaseModel):
     subtitle_y_position: int
 
 # 최종 비디오 생성 함수
-def create_final_video(video_filenames: List[str], 
+async def create_final_video(video_filenames: List[str], 
                        subtitles: List[str], 
                        music_url: str,
                        font_path: str,
@@ -35,10 +35,10 @@ def create_final_video(video_filenames: List[str],
     font_size = 40
     video_clips = []
     if(font_effect == "poping"):
-        tts_audio_path, durations = tts.text_to_speech_with_poping(subtitles)
+        tts_audio_path, durations = await tts.text_to_speech_with_poping(subtitles)
         video_clips = create_subtitle.create_video_with_word_subtitles(video_filenames, subtitles, durations,font_path, font_size, font_color, subtitle_y_position)
     elif font_effect == "split":
-        tts_audio_path, durations = tts.text_to_speech(subtitles)
+        tts_audio_path, durations = await tts.text_to_speech(subtitles)
         video_clips = create_subtitle.create_video_with_split_subtitles(video_filenames, subtitles, durations, font_path, font_size, font_color, subtitle_y_position)
 
 
@@ -79,8 +79,7 @@ def create_final_video(video_filenames: List[str],
 @router.post("/")
 async def generate_final_video(request: FinalVideoRequest):
 
-    final_video = await asyncio.to_thread(
-        create_final_video,
+    final_video = await create_final_video(
         request.videos,
         request.subtitles,
         request.music_url,
