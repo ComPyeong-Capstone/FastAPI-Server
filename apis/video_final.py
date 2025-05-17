@@ -4,10 +4,11 @@ from typing import List
 import os
 from pydantic import BaseModel
 from moviepy.editor import CompositeAudioClip
-from moviepy.editor import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip, AudioFileClip
+from moviepy.editor import concatenate_videoclips, AudioFileClip
 from apis import googleTTS as tts
 from apis import create_subtitle
 from dotenv import load_dotenv
+import asyncio
 
 router = APIRouter()
 load_dotenv()
@@ -78,7 +79,8 @@ def create_final_video(video_filenames: List[str],
 @router.post("/")
 async def generate_final_video(request: FinalVideoRequest):
 
-    final_video = create_final_video(
+    final_video = await asyncio.to_thread(
+        create_final_video,
         request.videos,
         request.subtitles,
         request.music_url,
