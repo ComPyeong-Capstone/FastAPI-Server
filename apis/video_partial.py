@@ -138,17 +138,30 @@ async def download_video(video_url: str, save_path: str):
     else:
         print(f"❌ Failed to download video: {video_url}")
 
+runway_semaphore = asyncio.Semaphore(3)
+
+async def generate_video_with_semaphore(image_filename: str, prompt: str, number: int = None):
+    async with runway_semaphore:
+        return await generate_video(image_filename, prompt, number)
+
 # FastAPI 엔드포인트
 @router.post("/")
 async def generate_partial_videos(request: VideoRequest):
     video_urls = []
 
-    for image_filename, subtitle in zip(request.images, request.subtitles):
-        image_path = os.path.join("images", image_filename)
-        prompt = await generate_prompt_from_image_and_subtitle(image_path, subtitle)
-        video_url = await generate_video(image_filename, prompt)
-        video_urls.append(video_url)
+    # 1. 프롬프트를 비동기로 먼저 병렬 생성
+    prompt_tasks = [
+        generate_prompt_from_image_and_subtitle(os.path.join("images", image_filename), subtitle)
+        for image_filename, subtitle in zip(request.images, request.subtitles)
+    ]
+    prompts = await asyncio.gather(*prompt_tasks)
 
+#    2. 이후 runway에 동시 요청
+    video_tasks = [
+        generate_video_with_semaphore(image_filename, prompt, idx)
+        for idx, (image_filename, prompt) in enumerate(zip(request.images, prompts), start=1)
+    ]
+    video_urls = await asyncio.gather(*video_tasks)
     return {"video_urls": video_urls}
 # 영상 하나 약 30초
 
