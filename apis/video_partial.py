@@ -177,10 +177,9 @@ async def upload_images_and_generate(
     subtitles: List[str] = Form(...),
     files: List[UploadFile] = File(...)
 ):
-
-    video_urls = []
-
-    for idx, (file, subtitle) in enumerate(zip(files, subtitles), start=1):
+    # 1. 이미지 저장
+    image_filenames = []
+    for idx, file in enumerate(files, start=1):
         ext = os.path.splitext(file.filename)[-1]
         filename = f"user_image_{idx}{ext}"
         image_path = os.path.join("images", filename)
@@ -188,9 +187,20 @@ async def upload_images_and_generate(
         with open(image_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
-        prompt = await generate_prompt_from_image_and_subtitle(image_path, subtitle)
-        video_url = await generate_video(filename, prompt, idx)
+        image_filenames.append(filename)
 
-        video_urls.append(video_url)
+    # 2. 프롬프트 병렬 생성
+    prompt_tasks = [
+        generate_prompt_from_image_and_subtitle(os.path.join("images", filename), subtitle)
+        for filename, subtitle in zip(image_filenames, subtitles)
+    ]
+    prompts = await asyncio.gather(*prompt_tasks)
+
+    # 3. Runway 병렬 요청 (최대 3개 동시에 진행)
+    video_tasks = [
+        generate_video_with_semaphore(filename, prompt, idx)
+        for idx, (filename, prompt) in enumerate(zip(image_filenames, prompts), start=1)
+    ]
+    video_urls = await asyncio.gather(*video_tasks)
 
     return {"video_urls": video_urls}
