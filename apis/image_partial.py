@@ -4,6 +4,7 @@ import openai
 import os
 import requests
 from dotenv import load_dotenv
+import asyncio
 
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -75,10 +76,10 @@ def generate_image(prompt: str, number: int) -> str:
 async def generate_single_image(request: PromptRequest):
     print(f"📝 입력 문장: {request.text}")
 
-    prompt = convert_to_prompt(request.text)
+    prompt = await asyncio.to_thread(convert_to_prompt, request.text)
     print(f"🎨 변환된 프롬프트: {prompt}")
 
-    image_url = generate_image(prompt, request.number)
+    image_url = await asyncio.to_thread(generate_image, prompt, request.number)
     print(f"✅ 생성된 이미지 URL: {image_url}")
 
     return {"image_url": image_url}
