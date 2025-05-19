@@ -266,3 +266,121 @@ def align_words_with_timings_split(subtitle_words, whisper_words):
         whisper_idx += 1
 
     return aligned_words
+
+
+def create_video_with_custom_chunks(video_filenames, subtitle_chunks_list, whisper_word_timings_list, font_path, font_size, text_color, subtitle_y_position):
+    """
+    사용자가 직접 정의한 자막 덩어리 리스트를 기반으로 poping 애니메이션 자막을 생성하는 함수.
+    Whisper 단어 타이밍과 매칭하여 각 덩어리의 시작/끝 시간으로 자막 처리.
+
+    Args:
+        video_filenames (List[str]): 비디오 파일명 리스트
+        subtitle_chunks_list (List[List[str]]): 각 문장에 대해 사용자가 나눈 자막 덩어리 리스트
+        whisper_word_timings_list (List[List[dict]]): Whisper로 분석된 단어별 타이밍 리스트
+        font_path (str): 폰트 이름
+        font_size (int): 글자 크기
+        text_color (str): 글자 색
+        subtitle_y_position (int): 자막 Y축 위치 오프셋
+
+    Returns:
+        List[VideoClip]: 자막이 입혀진 비디오 클립 리스트
+    """
+    from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
+
+    interval = 5  # 각 클립의 시작 시간 오프셋
+    video_clips = []
+
+    for idx, video_filename in enumerate(video_filenames):
+        video_path = os.path.join("videos", video_filename)
+        if not os.path.exists(video_path):
+            raise FileNotFoundError(f"{video_path} 파일이 존재하지 않습니다.")
+
+        clip = VideoFileClip(video_path)
+        subtitle_chunks = subtitle_chunks_list[idx]
+        whisper_word_timings = whisper_word_timings_list[idx]
+
+        # 사용자 자막 덩어리를 Whisper 타이밍과 매칭
+        aligned_chunks = align_custom_subtitles_with_timings(subtitle_chunks, whisper_word_timings)
+
+        print(f"\n🧾 [인덱스 {idx}] 사용자 정의 자막 타이밍:")
+        for w in aligned_chunks:
+            print(f"📝 {w['word']} | {w['start']} ~ {w['end']}")
+
+        # 자막 클립 생성
+        clip_start_time = idx * interval
+        word_clips = []
+
+        for chunk in aligned_chunks:
+            global_start = chunk["start"]
+            global_end = chunk["end"]
+            local_start = round(global_start - clip_start_time, 2)
+            local_end = round(global_end - clip_start_time, 2)
+            duration = round(local_end - local_start, 2)
+
+            # 범위 벗어나는 자막 제외
+            if local_start < 0 or local_start >= clip.duration:
+                continue
+            if local_end > clip.duration:
+                local_end = clip.duration
+                duration = round(local_end - local_start, 2)
+
+            txt = TextClip(
+                chunk["word"],
+                fontsize=font_size,
+                color=text_color,
+                font=font_path,
+                size=(clip.w, None),
+                method='caption'
+            ).set_position(("center", clip.h + subtitle_y_position))
+
+            pop = txt.resize(lambda t: 0.3 + 0.7 * (t / 0.2) if t < 0.2 else 1)
+            pop = pop.set_start(local_start).set_duration(duration)
+            word_clips.append(pop)
+
+        # 영상과 자막 합성
+        final = CompositeVideoClip([clip] + word_clips).set_duration(clip.duration)
+        video_clips.append(final)
+
+    return video_clips
+
+def align_custom_subtitles_with_timings(subtitle_chunks, whisper_word_timings):
+    """
+    사용자가 직접 묶은 자막 단위(subtitle_chunks)를 Whisper 결과(단어 단위 타이밍)와 정렬하여
+    각 자막 묶음의 시작~끝 타이밍 정보를 반환.
+
+    Args:
+        subtitle_chunks (List[str]): 사용자 자막 묶음 리스트
+            예: ["팀을 구성한 후", "주제 선정", "회의를", ...]
+        whisper_word_timings (List[dict]): Whisper 결과 (word, start, end 포함)
+            예: [{"word": "팀을", "start": 0.0, "end": 0.3}, ...]
+
+    Returns:
+        List[dict]: 병합된 자막 타이밍 리스트
+            예: [{"word": "팀을 구성한 후", "start": 0.0, "end": 0.8}, ...]
+    """
+    aligned_chunks = []
+    whisper_idx = 0
+
+    for chunk in subtitle_chunks:
+        chunk_words = chunk.strip().split()
+        chunk_len = len(chunk_words)
+        matched_words = []
+
+        # Whisper 결과와 일치하는 단어 순서대로 찾아서 타이밍 매칭
+        while whisper_idx < len(whisper_word_timings) and len(matched_words) < chunk_len:
+            matched_words.append(whisper_word_timings[whisper_idx])
+            whisper_idx += 1
+
+        # 타이밍 계산
+        if matched_words:
+            start_time = matched_words[0]["start"]
+            end_time = matched_words[-1]["end"]
+            aligned_chunks.append({
+                "word": chunk,
+                "start": round(start_time, 2),
+                "end": round(end_time, 2)
+            })
+
+    return aligned_chunks
+
+

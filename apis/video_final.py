@@ -8,6 +8,8 @@ from moviepy.editor import VideoFileClip, concatenate_videoclips, TextClip, Comp
 from apis import googleTTS as tts
 from apis import create_subtitle
 from dotenv import load_dotenv
+from typing import Union
+
 
 router = APIRouter()
 load_dotenv()
@@ -15,7 +17,7 @@ SERVER_HOST = os.getenv("SERVER_HOST")
 
 class FinalVideoRequest(BaseModel):
     videos: List[str]
-    subtitles: List[str]
+    subtitles: Union[List[str], List[List[str]]]  # 수정된 부분
     music_url: str
     font_path: str
     font_effect: str
@@ -39,6 +41,11 @@ def create_final_video(video_filenames: List[str],
     elif font_effect == "split":
         tts_audio_path, durations = tts.text_to_speech(subtitles)
         video_clips = create_subtitle.create_video_with_split_subtitles(video_filenames, subtitles, durations, font_path, font_size, font_color, subtitle_y_position)
+
+    elif font_effect == "custom_poping":
+        tts_audio_path, word_timings_list = tts.text_to_speech_with_poping([" ".join(chunks) for chunks in subtitles])
+        video_clips = create_subtitle.create_video_with_custom_chunks(
+            video_filenames, subtitles, word_timings_list, font_path, font_size, font_color, subtitle_y_position)
 
 
     # ✅ 모든 비디오 클립 이어 붙이기
