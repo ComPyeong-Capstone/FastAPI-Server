@@ -11,8 +11,8 @@ router = APIRouter()
 async def save_temp_video(upload_file: UploadFile) -> str:
     contents = await upload_file.read()
     video_path = f"/tmp/{uuid4().hex}.mp4"
-    async with await asyncio.to_thread(open, video_path, "wb") as f:
-        await asyncio.to_thread(f.write, contents)
+    with open(video_path, "wb") as f:
+        f.write(contents)
     return video_path
 
 def extract_thumbnail(video_path: str):
