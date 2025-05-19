@@ -150,6 +150,9 @@ async def text_to_speech_with_poping(text_list):
     start_time = 0  # milliseconds
     interval = 5000  # 5초 간격
     all_word_timings = []
+    start_time = 0  # milliseconds
+    interval = 5000  # 5초 간격
+    all_word_timings = []
 
     for idx, text in enumerate(text_list):
         # TTS 생성
@@ -192,8 +195,10 @@ async def text_to_speech_with_poping(text_list):
         os.remove(merged_temp_path)
 
     # 최종 길이 정리
+    # 최종 길이 정리
     final_length_ms = ((len(combined_audio) + 4999) // 5000) * 5000
     if len(combined_audio) < final_length_ms:
+        combined_audio += AudioSegment.silent(duration=final_length_ms - len(combined_audio))
         combined_audio += AudioSegment.silent(duration=final_length_ms - len(combined_audio))
 
     output_file = os.path.join(output_folder, get_next_filename())

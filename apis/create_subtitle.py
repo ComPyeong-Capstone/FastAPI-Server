@@ -65,7 +65,7 @@ def create_video_with_word_subtitles(video_filenames, subtitles, word_timings_li
     자연스럽게 병합된 단어 자막을 영상에 입히는 함수
     """
     video_clips = []
-    interval = 5  # 각 영상 시작 시간 (초 단위 오프셋)
+    interval = 5  # 각 클립의 예상 재생 시간 간격 (초 단위) — TTS 기준
 
     for idx, video_filename in enumerate(video_filenames):
         video_path = os.path.join("videos", video_filename)
@@ -120,6 +120,7 @@ def create_video_with_word_subtitles(video_filenames, subtitles, word_timings_li
             ).set_position(("center", clip.h + subtitle_y_position))
 
             pop = txt.resize(lambda t: 0.3 + 0.7 * (t / 0.2) if t < 0.2 else 1)
+            pop = pop.set_start(local_start).set_duration(duration)
             pop = pop.set_start(local_start).set_duration(duration)
             word_clips.append(pop)
 
