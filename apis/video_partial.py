@@ -8,6 +8,7 @@ import openai
 from runwayml import RunwayML  # ✅ Runway API 클라이언트 사용
 from pydantic import BaseModel
 import shutil
+import asyncio
 
 router = APIRouter()
 
@@ -30,11 +31,11 @@ class SingleVideoRequest(BaseModel):
     number: int
 
 # GPT에 이미지와 자막을 전달해 프롬프트 생성
-def generate_prompt_from_image_and_subtitle(image_path: str, subtitle: str) -> str:
-    with open(image_path, "rb") as f:
-        base64_image = base64.b64encode(f.read()).decode("utf-8")
+async def generate_prompt_from_image_and_subtitle(image_path: str, subtitle: str) -> str:
+    base64_image = await asyncio.to_thread(lambda: base64.b64encode(open(image_path, "rb").read()).decode("utf-8"))
 
-    response = openai_client.chat.completions.create(
+    response = await asyncio.to_thread(
+        openai_client.chat.completions.create,
         model="gpt-4-turbo",
         messages=[
             {
@@ -66,13 +67,13 @@ def generate_prompt_from_image_and_subtitle(image_path: str, subtitle: str) -> s
 
 
 # Runway API 호출 함수
-def generate_video(image_filename: str, subtitle: str, number: int = None):
+async def generate_video(image_filename: str, subtitle: str, number: int = None):
     # 이미지 파일을 Base64로 인코딩
     image_path = os.path.join("images", image_filename)
-    with open(image_path, "rb") as f:
-        base64_image = base64.b64encode(f.read()).decode("utf-8")
+    base64_image = await asyncio.to_thread(lambda: base64.b64encode(open(image_path, "rb").read()).decode("utf-8"))
 
-    task = client.image_to_video.create(
+    task = await asyncio.to_thread(
+        client.image_to_video.create,
         model='gen3a_turbo',  # ✅ 최신 모델 사용
         prompt_image=f"data:image/png;base64,{base64_image}",
         prompt_text= subtitle,
@@ -87,11 +88,11 @@ def generate_video(image_filename: str, subtitle: str, number: int = None):
     # 작업 상태 확인
     print("Waiting for the task to complete...")
     while True:
-        task_status = client.tasks.retrieve(task_id)  # ✅ 작업 상태 확인
+        task_status = await asyncio.to_thread(client.tasks.retrieve, task_id)
         print(f"Current status: {task_status.status}")
         if task_status.status in ['SUCCEEDED', 'FAILED']:
             break
-        time.sleep(10)  # ✅ 10초 대기 후 다시 확인
+        await asyncio.sleep(10)
 
     # 작업 결과 반환
     if task_status.status == 'SUCCEEDED':
@@ -115,7 +116,7 @@ def generate_video(image_filename: str, subtitle: str, number: int = None):
         #     i += 1
         #     save_path = os.path.join("videos", f"{base_name}_{i}{ext}")
         
-        download_video(video_url, save_path)
+        await download_video(video_url, save_path)
 
         return f"http://{SERVER_HOST}:8000/{save_path}"
     else:
@@ -125,10 +126,10 @@ def generate_video(image_filename: str, subtitle: str, number: int = None):
         return None
 
 # ✅ 영상 다운로드 함수
-def download_video(video_url: str, save_path: str):
+async def download_video(video_url: str, save_path: str):
     print(f"Downloading video from: {video_url}")
     
-    response = requests.get(video_url, stream=True)
+    response = await asyncio.to_thread(requests.get, video_url, stream=True)
     if response.status_code == 200:
         with open(save_path, "wb") as video_file:
             for chunk in response.iter_content(chunk_size=1024):
@@ -137,25 +138,38 @@ def download_video(video_url: str, save_path: str):
     else:
         print(f"❌ Failed to download video: {video_url}")
 
+runway_semaphore = asyncio.Semaphore(3)
+
+async def generate_video_with_semaphore(image_filename: str, prompt: str, number: int = None):
+    async with runway_semaphore:
+        return await generate_video(image_filename, prompt, number)
+
 # FastAPI 엔드포인트
 @router.post("/")
 async def generate_partial_videos(request: VideoRequest):
     video_urls = []
 
-    for image_filename, subtitle in zip(request.images, request.subtitles):
-        image_path = os.path.join("images", image_filename)
-        prompt = generate_prompt_from_image_and_subtitle(image_path, subtitle)
-        video_url = generate_video(image_filename, prompt)
-        video_urls.append(video_url)
+    # 1. 프롬프트를 비동기로 먼저 병렬 생성
+    prompt_tasks = [
+        generate_prompt_from_image_and_subtitle(os.path.join("images", image_filename), subtitle)
+        for image_filename, subtitle in zip(request.images, request.subtitles)
+    ]
+    prompts = await asyncio.gather(*prompt_tasks)
 
+#    2. 이후 runway에 동시 요청
+    video_tasks = [
+        generate_video_with_semaphore(image_filename, prompt, idx)
+        for idx, (image_filename, prompt) in enumerate(zip(request.images, prompts), start=1)
+    ]
+    video_urls = await asyncio.gather(*video_tasks)
     return {"video_urls": video_urls}
 # 영상 하나 약 30초
 
 @router.post("/single")
 async def generate_single_video(request: SingleVideoRequest):
     image_path = os.path.join("images", request.image)
-    prompt = generate_prompt_from_image_and_subtitle(image_path, request.subtitle)
-    video_url = generate_video(request.image, prompt, request.number)
+    prompt = await generate_prompt_from_image_and_subtitle(image_path, request.subtitle)
+    video_url = await generate_video(request.image, prompt, request.number)
     return {"video_url": video_url}
 
 @router.post("/upload-images")
@@ -163,10 +177,9 @@ async def upload_images_and_generate(
     subtitles: List[str] = Form(...),
     files: List[UploadFile] = File(...)
 ):
-
-    video_urls = []
-
-    for idx, (file, subtitle) in enumerate(zip(files, subtitles), start=1):
+    # 1. 이미지 저장
+    image_filenames = []
+    for idx, file in enumerate(files, start=1):
         ext = os.path.splitext(file.filename)[-1]
         filename = f"user_image_{idx}{ext}"
         image_path = os.path.join("images", filename)
@@ -174,9 +187,20 @@ async def upload_images_and_generate(
         with open(image_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
-        prompt = generate_prompt_from_image_and_subtitle(image_path, subtitle)
-        video_url = generate_video(filename, prompt, idx)
+        image_filenames.append(filename)
 
-        video_urls.append(video_url)
+    # 2. 프롬프트 병렬 생성
+    prompt_tasks = [
+        generate_prompt_from_image_and_subtitle(os.path.join("images", filename), subtitle)
+        for filename, subtitle in zip(image_filenames, subtitles)
+    ]
+    prompts = await asyncio.gather(*prompt_tasks)
+
+    # 3. Runway 병렬 요청 (최대 3개 동시에 진행)
+    video_tasks = [
+        generate_video_with_semaphore(filename, prompt, idx)
+        for idx, (filename, prompt) in enumerate(zip(image_filenames, prompts), start=1)
+    ]
+    video_urls = await asyncio.gather(*video_tasks)
 
     return {"video_urls": video_urls}

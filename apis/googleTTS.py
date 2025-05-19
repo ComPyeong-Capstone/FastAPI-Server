@@ -6,6 +6,9 @@ import whisper
 from pydub import AudioSegment
 from dotenv import load_dotenv
 import time
+import asyncio
+import httpx
+
 # .env 파일 로드
 load_dotenv()
 
@@ -33,7 +36,7 @@ def get_next_filename():
     next_number = max(numbers) + 1 if numbers else 1
     return f"tts_output_{next_number}.mp3"
 
-def generate_tts(text):
+async def generate_tts(text):
     
     # Google Cloud Text-to-Speech API를 사용하여 입력된 텍스트를 음성 데이터(MP3)로 변환하는 함수.
     # 변환된 오디오 데이터를 반환한다.
@@ -51,7 +54,12 @@ def generate_tts(text):
             "speakingRate": 1.25
         }
     }
-    response = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(data))
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            url,
+            headers={"Content-Type": "application/json"},
+            json=data
+        )
     
     if response.status_code == 200:
         response_data = response.json()
@@ -70,7 +78,7 @@ def split_sentence(sentence):
     return ' '.join(words[:mid]), ' '.join(words[mid:])
 
 # 메인 함수: 입력된 문자열 리스트를 TTS로 변환 후 합치고 duration 배열 반환
-def text_to_speech(text_list):
+async def text_to_speech(text_list):
     if not isinstance(text_list, list):
         raise ValueError("입력은 리스트 형식이어야 합니다.")
     
@@ -84,17 +92,17 @@ def text_to_speech(text_list):
         front_part, back_part = split_sentence(text)
 
         # 앞부분 TTS 생성 및 분석
-        front_tts_data = generate_tts(front_part)
+        front_tts_data = await generate_tts(front_part)
         front_temp_path = os.path.join(output_folder, f"temp_front_{idx}.mp3")
         with open(front_temp_path, "wb") as f:
             f.write(front_tts_data)
 
-        front_duration = analyze_audio_with_whisper(front_temp_path)
+        front_duration = await asyncio.to_thread(analyze_audio_with_whisper, front_temp_path)
         front_durations.append(front_duration)
 
         # 분리된 두 부분을 다시 합쳐서 최종 TTS 생성
         merged_text = front_part + " " + back_part
-        merged_tts_data = generate_tts(merged_text)
+        merged_tts_data = await generate_tts(merged_text)
 
         merged_temp_path = os.path.join(output_folder, f"temp_merged_{idx}.mp3")
         with open(merged_temp_path, "wb") as f:
@@ -130,7 +138,7 @@ def text_to_speech(text_list):
     return output_file, front_durations
 
 
-def text_to_speech_with_poping(text_list):
+async def text_to_speech_with_poping(text_list):
     """
     텍스트 리스트를 받아 TTS 오디오 파일 생성 + 단어별 타이밍 분석 (poping 스타일)
     반환: (TTS 파일 경로, 모든 단어 타이밍 리스트)
@@ -145,7 +153,7 @@ def text_to_speech_with_poping(text_list):
 
     for idx, text in enumerate(text_list):
         # TTS 생성
-        tts_data = generate_tts(text)
+        tts_data = await generate_tts(text)
         merged_temp_path = os.path.join(output_folder, f"temp_merged_{idx}.mp3")
         with open(merged_temp_path, "wb") as f:
             f.write(tts_data)
@@ -153,7 +161,7 @@ def text_to_speech_with_poping(text_list):
         tts_audio = AudioSegment.from_mp3(merged_temp_path)
 
         # Whisper 분석
-        word_timings = analyze_audio_words_with_whisper(merged_temp_path)
+        word_timings = await asyncio.to_thread(analyze_audio_words_with_whisper, merged_temp_path)
 
         # 🔧 start_time 보정은 오디오 결합 전에 적용해야 정확
         adjusted_word_timings = []
