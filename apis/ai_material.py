@@ -14,6 +14,7 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 STABLE_DIFFUSION_API_KEY = os.getenv("STABLE_DIFFUSION_API_KEY")
 SERVER_HOST = os.getenv("SERVER_HOST")
+MAX_RETRIES = 2
 
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
@@ -78,87 +79,98 @@ def translate_to_english(text_list: list):
 def generate_image_prompt(subtitles):
     text = "\n".join(subtitles)
     prompt = f"""
-        Generate a suitable image description for each of the following subtitles. 
-        The description should be highly detailed and optimized for AI-based image generation. 
-        Do not include the original subtitles in the response—only provide the descriptions.
+You are an AI system that generates highly detailed image prompts for generative models like Stable Diffusion.
 
-        Subtitles:
-        {text}
+Your task is to generate exactly {len(subtitles)} distinct and vivid image descriptions. 
+Each description must directly match the meaning and tone of each subtitle listed below.
 
-        Output:
-        - You must generate exactly {len(subtitles)} image descriptions.
-        - Each description must be on a separate line.
-        - Ensure the descriptions are vivid, creative, and directly relevant to the subtitle.
-        - Do not include any extra text or formatting.
-        """.strip()
-    
+📌 Strict Output Rules:
+- Return exactly {len(subtitles)} lines.
+- Each line must correspond to one subtitle.
+- Do NOT use numbers, bullet points, or labels.
+- Do NOT include the original subtitles.
+- Each line must be a standalone English prompt optimized for image generation.
+- Do NOT include any extra explanation or formatting.
+
+Subtitles:
+{text}
+""".strip()
+
     response = client.chat.completions.create(
         model="gpt-4-turbo",
-        messages=[{"role": "system", "content": "You are an AI that generates highly detailed image descriptions for Stable Diffusion."},
-                  {"role": "user", "content": prompt}],
+        messages=[
+            {"role": "system", "content": "You generate English image prompts for subtitles used in AI video generation."},
+            {"role": "user", "content": prompt},
+        ],
     )
 
-    # ✅ 빈 문자열 제거하여 프롬프트 정리
-    generated_prompts = [p.strip() for p in response.choices[0].message.content.strip().split("\n") if p.strip()]
+    raw_output = response.choices[0].message.content.strip()
+    generated_prompts = [line.strip() for line in raw_output.split("\n") if line.strip()]
 
-    return generated_prompts
+    # ✅ 보정: GPT가 줄 수보다 적게 반환했을 때 기본 이미지 프롬프트로 채움
+    if len(generated_prompts) < len(subtitles):
+        print(f"⚠️ 생성된 프롬프트 개수 부족: {len(generated_prompts)} / 기대: {len(subtitles)}")
+        for _ in range(len(subtitles) - len(generated_prompts)):
+            generated_prompts.append("A generic cinematic frame with abstract colors and soft lighting.")
 
-# Stable Diffusion API 호출 함수
+    # ✅ 보정: GPT가 잘못해서 너무 많이 반환한 경우도 잘라냄
+
+    print("📸 생성된 이미지 프롬프트:", generated_prompts)
+
+    return generated_prompts[:len(subtitles)]
+
+# 영상 생성 실패 시 재생성 시도 함수
+async def generate_one_image(prompt: str, index: int):
+    url = "https://api.stability.ai/v2beta/stable-image/generate/sd3"
+    headers = {
+        "Authorization": f"Bearer {STABLE_DIFFUSION_API_KEY}",
+        "Accept": "image/*",
+    }
+    data = {
+        "model": "sd3.5-large-turbo",
+        "prompt": prompt,
+        "aspect_ratio": "9:16",
+        "output_format": "jpeg",
+    }
+
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, headers=headers, files={"none": ""}, data=data)
+
+            if response.status_code == 200:
+                filename = os.path.join("images", f"generated_image_{index+1}.jpeg")
+                with open(filename, "wb") as f:
+                    f.write(response.content)
+
+                image_url = f"http://{SERVER_HOST}:8000/{filename.replace(os.sep, '/')}"
+                print(f"✅ [{index+1}] 이미지 저장 완료 (시도 {attempt+1})")
+                return image_url
+            else:
+                print(f"❌ [{index+1}] 실패 (시도 {attempt+1}): {response.status_code} - {response.text}")
+                await asyncio.sleep(1)
+
+        except Exception as e:
+            print(f"❌ [{index+1}] 예외 발생 (시도 {attempt+1}): {e}")
+            await asyncio.sleep(1)
+
+    print(f"❌ [{index+1}] 최종 실패: {prompt}")
+    return None
+
+
 async def generate_images(subtitles):
-    image_urls = []
-    max_images = 12
-
     if not os.path.exists("images"):
         os.makedirs("images")
-
-    # ✅ 현재 이미지 개수 기준으로 고유 번호 시작점 계산
-    # existing_images = [f for f in os.listdir("images") if f.endswith(".jpeg")]
-    # start_index = len(existing_images)
 
     translated_subtitles = await asyncio.to_thread(translate_to_english, subtitles)
     image_prompts = await asyncio.to_thread(generate_image_prompt, translated_subtitles)
 
-    async with httpx.AsyncClient() as client:
-        tasks = []
-        for i, prompt in enumerate(image_prompts[:max_images]):
-            tasks.append(
-                client.post(
-                    "https://api.stability.ai/v2beta/stable-image/generate/sd3",
-                    headers={
-                        "Authorization": f"Bearer {STABLE_DIFFUSION_API_KEY}",
-                        "Accept": "image/*",
-                    },
-                    files={"none": ""},
-                    data={
-                        "model": "sd3.5-large-turbo",
-                        "prompt": prompt,
-                        "aspect_ratio": "9:16",
-                        "output_format": "jpeg",
-                    },
-                )
-            )
-
-        responses = await asyncio.gather(*tasks)
-
-        for i, response in enumerate(responses):
-            if response.status_code == 200:
-                image_filename = os.path.join("images", f"generated_image_{i+1}.jpeg")
-                # unique_index = start_index + i
-                # image_filename = os.path.join("images", f"generated_image_{unique_index}.jpeg")
-
-                with open(image_filename, "wb") as img_file:
-                    img_file.write(response.content)
-
-                image_url = f"http://{SERVER_HOST}:8000/{image_filename.replace(os.sep, '/')}"
-                image_urls.append(image_url)
-
-                print(f"✅ 이미지 저장 완료: {image_filename}")
-            else:
-                print(f"❌ 이미지 생성 실패: {response.status_code} - {response.text}")
-                image_urls.append(None)
-
+    tasks = [
+        generate_one_image(prompt, i)
+        for i, prompt in enumerate(image_prompts[:12])
+    ]
+    image_urls = await asyncio.gather(*tasks)
     return image_urls
-
 
 # ✅ FastAPI 엔드포인트 (Request Body 사용)
 @router.post("/")
