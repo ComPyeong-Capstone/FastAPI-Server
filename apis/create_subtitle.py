@@ -115,7 +115,7 @@ def create_video_with_word_subtitles(video_filenames, subtitles, word_timings_li
                 fontsize=font_size,
                 color=text_color,
                 font=font_path,
-                size=(clip.w, None),
+                size=(clip.w, 200),
                 method='caption'
             ).set_position(("center", clip.h + subtitle_y_position))
 
@@ -330,7 +330,7 @@ def create_video_with_custom_chunks(video_filenames, subtitle_chunks_list, whisp
                 fontsize=font_size,
                 color=text_color,
                 font=font_path,
-                size=(clip.w, None),
+                size=(clip.w, 150),
                 method='caption'
             ).set_position(("center", clip.h + subtitle_y_position))
 
@@ -345,34 +345,20 @@ def create_video_with_custom_chunks(video_filenames, subtitle_chunks_list, whisp
     return video_clips
 
 def align_custom_subtitles_with_timings(subtitle_chunks, whisper_word_timings):
-    """
-    사용자가 직접 묶은 자막 단위(subtitle_chunks)를 Whisper 결과(단어 단위 타이밍)와 정렬하여
-    각 자막 묶음의 시작~끝 타이밍 정보를 반환.
-
-    Args:
-        subtitle_chunks (List[str]): 사용자 자막 묶음 리스트
-            예: ["팀을 구성한 후", "주제 선정", "회의를", ...]
-        whisper_word_timings (List[dict]): Whisper 결과 (word, start, end 포함)
-            예: [{"word": "팀을", "start": 0.0, "end": 0.3}, ...]
-
-    Returns:
-        List[dict]: 병합된 자막 타이밍 리스트
-            예: [{"word": "팀을 구성한 후", "start": 0.0, "end": 0.8}, ...]
-    """
     aligned_chunks = []
     whisper_idx = 0
+    last_end_time = whisper_word_timings[-1]["end"] if whisper_word_timings else 0.0
 
     for chunk in subtitle_chunks:
         chunk_words = chunk.strip().split()
         chunk_len = len(chunk_words)
         matched_words = []
 
-        # Whisper 결과와 일치하는 단어 순서대로 찾아서 타이밍 매칭
         while whisper_idx < len(whisper_word_timings) and len(matched_words) < chunk_len:
             matched_words.append(whisper_word_timings[whisper_idx])
             whisper_idx += 1
 
-        # 타이밍 계산
+        # ✅ 매칭된 것이 있으면 정상 처리
         if matched_words:
             start_time = matched_words[0]["start"]
             end_time = matched_words[-1]["end"]
@@ -381,7 +367,75 @@ def align_custom_subtitles_with_timings(subtitle_chunks, whisper_word_timings):
                 "start": round(start_time, 2),
                 "end": round(end_time, 2)
             })
+        else:
+            # ✅ Whisper 타이밍이 끝났지만 자막이 남은 경우 → 마지막 시간 이후로 처리
+            aligned_chunks.append({
+                "word": chunk,
+                "start": round(last_end_time, 2),
+                "end": round(last_end_time + 0.5, 2)  # 대략적인 길이 할당
+            })
+            last_end_time += 0.5  # 다음 자막을 위해 오프셋 이동
 
     return aligned_chunks
+
+
+#사실상 기존과 동일
+def create_video_with_poping_subtitles(video_filenames, subtitles, word_timings_list, font_path, font_size, text_color, subtitle_y_position):
+    """
+    글자가 작게 시작해서 커지는 팝업 애니메이션을 적용하되 선명도를 유지한 버전
+    """
+    from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
+
+    video_clips = []
+    interval = 5
+
+    for idx, video_filename in enumerate(video_filenames):
+        video_path = os.path.join("videos", video_filename)
+        if not os.path.exists(video_path):
+            raise FileNotFoundError(f"{video_path} 파일이 존재하지 않습니다.")
+
+        clip = VideoFileClip(video_path)
+        subtitle_text = subtitles[idx].strip()
+        subtitle_words = subtitle_text.split()
+        whisper_word_timings = word_timings_list[idx]
+
+        aligned_word_timings = align_words_with_timings_split(subtitle_words, whisper_word_timings)
+        merged_word_timings = merge_natural_korean_phrases(aligned_word_timings)
+
+        word_clips = []
+        clip_start_time = idx * interval
+
+        for word_info in merged_word_timings:
+            global_start = word_info["start"]
+            global_end = word_info["end"]
+            local_start = round(global_start - clip_start_time, 2)
+            local_end = round(global_end - clip_start_time, 2)
+            duration = round(local_end - local_start, 2)
+
+            if local_start < 0 or local_start >= clip.duration:
+                continue
+            if local_end > clip.duration:
+                local_end = clip.duration
+                duration = round(local_end - local_start, 2)
+
+            # 고해상도로 텍스트 렌더링 후 절반 크기로 기본 사이즈 설정
+            txt = TextClip(
+                word_info["word"],
+                fontsize=font_size * 2,
+                color=text_color,
+                font=font_path,
+                size=(clip.w * 2, 300),
+                method='caption'
+            ).resize(0.5).set_position(("center", clip.h + subtitle_y_position))
+
+            # 팝업 애니메이션 적용 (선명도 유지)
+            pop = txt.resize(lambda t: 0.3 + 0.7 * (t / 0.2) if t < 0.2 else 1)
+            pop = pop.set_start(local_start).set_duration(duration)
+            word_clips.append(pop)
+
+        final = CompositeVideoClip([clip] + word_clips).set_duration(clip.duration)
+        video_clips.append(final)
+
+    return video_clips
 
 
