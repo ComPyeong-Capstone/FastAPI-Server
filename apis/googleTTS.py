@@ -150,6 +150,9 @@ async def text_to_speech_with_poping(text_list):
     start_time = 0  # milliseconds
     interval = 5000  # 5초 간격
     all_word_timings = []
+    start_time = 0  # milliseconds
+    interval = 5000  # 5초 간격
+    all_word_timings = []
 
     for idx, text in enumerate(text_list):
         # TTS 생성
@@ -192,8 +195,10 @@ async def text_to_speech_with_poping(text_list):
         os.remove(merged_temp_path)
 
     # 최종 길이 정리
+    # 최종 길이 정리
     final_length_ms = ((len(combined_audio) + 4999) // 5000) * 5000
     if len(combined_audio) < final_length_ms:
+        combined_audio += AudioSegment.silent(duration=final_length_ms - len(combined_audio))
         combined_audio += AudioSegment.silent(duration=final_length_ms - len(combined_audio))
 
     output_file = os.path.join(output_folder, get_next_filename())
@@ -206,7 +211,7 @@ async def text_to_speech_with_poping(text_list):
 
 # Whisper 모델을 통해 오디오의 앞부분 duration과 각 타이밍을 분석하고 출력하는 함수
 def analyze_audio_with_whisper(audio_file):
-    model = whisper.load_model("small") #whisper model : tiny, base, small, medium, large
+    model = whisper.load_model("base") #whisper model : tiny, base, small, medium, large
     result = model.transcribe(audio_file, word_timestamps=True)
 
     print(f"\n🔍 [Whisper 분석 결과: {audio_file}] 🔍")
@@ -236,7 +241,7 @@ def analyze_audio_words_with_whisper(audio_file):
     """
 
     # Whisper 모델 로드 (medium 모델 사용)
-    model = whisper.load_model("small")  #whisper model : tiny, base, small, medium, large
+    model = whisper.load_model("base")  #whisper model : tiny, base, small, medium, large
 
     # 오디오를 word timestamps 옵션을 켜고 변환
     result = model.transcribe(audio_file, word_timestamps=True)
