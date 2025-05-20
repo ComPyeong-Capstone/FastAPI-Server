@@ -345,34 +345,20 @@ def create_video_with_custom_chunks(video_filenames, subtitle_chunks_list, whisp
     return video_clips
 
 def align_custom_subtitles_with_timings(subtitle_chunks, whisper_word_timings):
-    """
-    사용자가 직접 묶은 자막 단위(subtitle_chunks)를 Whisper 결과(단어 단위 타이밍)와 정렬하여
-    각 자막 묶음의 시작~끝 타이밍 정보를 반환.
-
-    Args:
-        subtitle_chunks (List[str]): 사용자 자막 묶음 리스트
-            예: ["팀을 구성한 후", "주제 선정", "회의를", ...]
-        whisper_word_timings (List[dict]): Whisper 결과 (word, start, end 포함)
-            예: [{"word": "팀을", "start": 0.0, "end": 0.3}, ...]
-
-    Returns:
-        List[dict]: 병합된 자막 타이밍 리스트
-            예: [{"word": "팀을 구성한 후", "start": 0.0, "end": 0.8}, ...]
-    """
     aligned_chunks = []
     whisper_idx = 0
+    last_end_time = whisper_word_timings[-1]["end"] if whisper_word_timings else 0.0
 
     for chunk in subtitle_chunks:
         chunk_words = chunk.strip().split()
         chunk_len = len(chunk_words)
         matched_words = []
 
-        # Whisper 결과와 일치하는 단어 순서대로 찾아서 타이밍 매칭
         while whisper_idx < len(whisper_word_timings) and len(matched_words) < chunk_len:
             matched_words.append(whisper_word_timings[whisper_idx])
             whisper_idx += 1
 
-        # 타이밍 계산
+        # ✅ 매칭된 것이 있으면 정상 처리
         if matched_words:
             start_time = matched_words[0]["start"]
             end_time = matched_words[-1]["end"]
@@ -381,6 +367,14 @@ def align_custom_subtitles_with_timings(subtitle_chunks, whisper_word_timings):
                 "start": round(start_time, 2),
                 "end": round(end_time, 2)
             })
+        else:
+            # ✅ Whisper 타이밍이 끝났지만 자막이 남은 경우 → 마지막 시간 이후로 처리
+            aligned_chunks.append({
+                "word": chunk,
+                "start": round(last_end_time, 2),
+                "end": round(last_end_time + 0.5, 2)  # 대략적인 길이 할당
+            })
+            last_end_time += 0.5  # 다음 자막을 위해 오프셋 이동
 
     return aligned_chunks
 
