@@ -11,7 +11,7 @@ SERVER_HOST = os.getenv("SERVER_HOST")
 async def list_preview_music():
     base_url = f"http://{SERVER_HOST}:8000/music"
     previews = [
-        {"title": "딸기맛 사이다", "url": f"{base_url}/bgm_01.mp3"},
+        {"title": "Strawberry Cider", "url": f"{base_url}/bgm_01.mp3"},
         {"title": "White Color", "url": f"{base_url}/bgm_02.mp3"},
         {"title": "Blue Jacket", "url": f"{base_url}/bgm_03.mp3"},
         {"title": "Cute Puppy", "url": f"{base_url}/bgm_04.mp3"},
