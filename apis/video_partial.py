@@ -94,31 +94,57 @@ async def generate_video(image_filename: str, subtitle: str, number: int = None)
             break
         await asyncio.sleep(10)
 
-    # 작업 결과 반환
+# 작업 결과 반환
     if task_status.status == 'SUCCEEDED':
         video_url = task_status.output[0]
         print(f"Task completed successfully! Video URL: {video_url}")
 
-        if number is not None:
-            base_name = f"generated_video_{number}"
-        else:
-            filename_without_ext, _ = os.path.splitext(image_filename)
-            base_name = f"generated_{filename_without_ext}_AI"
-
-        save_path = os.path.join("videos", f"{base_name}.mp4")
+        videos_dir = "videos"
         ext = ".mp4"
 
-        save_path = os.path.join("videos", f"{base_name}{ext}")
+        # 🔢 요청번호 관리
+        request_counter_path = os.path.join(videos_dir, "request_counter.txt")
+        if not os.path.exists(request_counter_path):
+            current_request_number = 1
+        else:
+            with open(request_counter_path, "r") as f:
+                current_request_number = int(f.read().strip())
+            current_request_number += 1
+            if current_request_number > 20:
+                current_request_number = 1
 
-        # i = 1
-        # save_path = os.path.join("videos", f"{base_name}_{i}{ext}")
-        # while os.path.exists(save_path):
-        #     i += 1
-        #     save_path = os.path.join("videos", f"{base_name}_{i}{ext}")
-        
+        # 🔄 삭제 정책
+        if current_request_number == 10:
+            delete_range = range(11, 21)
+        elif current_request_number == 20:
+            delete_range = range(1, 11)
+        else:
+            delete_range = []
+
+        for filename in os.listdir(videos_dir):
+            for req_num in delete_range:
+                prefix = f"generated_video_{req_num:02d}_"
+                if filename.startswith(prefix) and filename.endswith(ext):
+                    os.remove(os.path.join(videos_dir, filename))
+                    print(f"🗑️ Deleted old file: {filename}")
+
+        # 요청번호 저장
+        with open(request_counter_path, "w") as f:
+            f.write(str(current_request_number))
+
+        # 🎥 영상번호 자동 부여 (01 ~ 12 중에서 비어있는 것)
+        for i in range(1, 100):  # 최대 99개까지 시도 (안전장치)
+            video_number = f"{i:02d}"
+            filename = f"generated_video_{current_request_number:02d}_{video_number}{ext}"
+            save_path = os.path.join(videos_dir, filename)
+            if not os.path.exists(save_path):
+                break
+
+        print(f"💾 Saving video as: {save_path}")
         await download_video(video_url, save_path)
 
         return f"http://{SERVER_HOST}:8000/{save_path}"
+
     else:
         print("Task failed. No video generated.")
         print("Task status info:", task_status.dict())  # 전체 상태를 보기 위해 추가
