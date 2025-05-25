@@ -20,7 +20,7 @@ class FinalVideoRequest(BaseModel):
     font_path: str
     font_effect: str
     font_color: str
-    subtitle_y_position: int  # 입력으로 받지만 무시하고 해상도 기준으로 덮어씀
+    subtitle_y_position: str
 
 # 최종 비디오 생성 함수
 async def create_final_video(
@@ -30,7 +30,7 @@ async def create_final_video(
     font_path: str,
     font_effect: str,
     font_color: str,
-    subtitle_y_position: int
+    subtitle_y_position: str
 ):
     # ✅ 해상도 기준으로 자막 크기 및 위치 계산 (첫 번째 영상 기준)
     filename = video_filenames[0]
@@ -40,27 +40,37 @@ async def create_final_video(
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"❌ Video file not found: {video_path}")
 
-    temp_clip = VideoFileClip(video_path)
-    video_height = temp_clip.h
-    font_size = int(video_height * 0.025)
-    subtitle_y_position = int(video_height / 2)  # 영상 중앙에 위치
-    #subtitle_y_position = int(video_height * 4 / 5) - int(font_size / 2)
-    print(f"🎯 video height: {video_height}, font size: {font_size}, subtitle y: {subtitle_y_position}")
-    temp_clip.close()
-
+    subtitle_y_positions = []
+    font_sizes = []
+    for filename in video_filenames:
+        video_path = os.path.join("videos", filename)
+        clip = VideoFileClip(video_path)
+        h = clip.h
+        f_size = int(h*0.03)
+        if subtitle_y_position == "center":
+            y_ratio = 0.425
+        elif subtitle_y_position == "bottom":
+            y_ratio = 0.75
+        elif subtitle_y_position == "top":
+            y_ratio = 0.1
+        y_pos = int(h * y_ratio - f_size * 0.5)
+        font_sizes.append(f_size)          # 해상도 기반 폰트 크기
+        subtitle_y_positions.append(y_pos)
+        clip.close()
+    
     video_clips = []
     if font_effect == "poping":
         tts_audio_path, durations = await tts.text_to_speech_with_poping(subtitles)
         video_clips = create_subtitle.create_video_with_word_subtitles(
-            video_filenames, subtitles, durations, font_path, font_size, font_color, subtitle_y_position)
+            video_filenames, subtitles, durations, font_path, font_sizes, font_color, subtitle_y_positions)
     elif font_effect == "split":
         tts_audio_path, durations = await tts.text_to_speech(subtitles)
         video_clips = create_subtitle.create_video_with_split_subtitles(
-            video_filenames, subtitles, durations, font_path, font_size, font_color, subtitle_y_position)
+            video_filenames, subtitles, durations, font_path, font_sizes, font_color, subtitle_y_positions)
     elif font_effect == "custom_poping":
         tts_audio_path, word_timings_list = await tts.text_to_speech_with_poping([" ".join(chunks) for chunks in subtitles])
         video_clips = create_subtitle.create_video_with_custom_chunks(
-            video_filenames, subtitles, word_timings_list, font_path, font_size, font_color, subtitle_y_position)
+            video_filenames, subtitles, word_timings_list, font_path, font_sizes, font_color, subtitle_y_positions)
 
     # ✅ 모든 비디오 클립 이어 붙이기
     final_video = concatenate_videoclips(video_clips, method="compose")
@@ -105,7 +115,7 @@ async def generate_final_video(request: FinalVideoRequest):
         request.font_path,
         request.font_effect,
         request.font_color,
-        request.subtitle_y_position  # 넘어오긴 하지만 무시됨
+        request.subtitle_y_position
     )
 
     final_video_path = f"http://{SERVER_HOST}/videos/{final_video}"
