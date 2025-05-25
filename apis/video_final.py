@@ -1,16 +1,13 @@
 # 사용자의 입력을 통해 영상 합치기 / 음악, 자막, tts 입히기 작업을 진행해 최종 결과물 영상을 반환
 from fastapi import APIRouter
-from typing import List
+from typing import List, Union
 import os
 from pydantic import BaseModel
-from moviepy.editor import CompositeAudioClip
-from moviepy.editor import concatenate_videoclips, AudioFileClip
+from moviepy.editor import CompositeAudioClip, concatenate_videoclips, AudioFileClip, VideoFileClip
 from apis import googleTTS as tts
 from apis import create_subtitle
 from dotenv import load_dotenv
 import asyncio
-from typing import Union
-
 
 router = APIRouter()
 load_dotenv()
@@ -18,43 +15,59 @@ SERVER_HOST = os.getenv("SERVER_HOST")
 
 class FinalVideoRequest(BaseModel):
     videos: List[str]
-    subtitles: Union[List[str], List[List[str]]]  # 수정된 부분
+    subtitles: Union[List[str], List[List[str]]]
     music_url: str
     font_path: str
     font_effect: str
     font_color: str
-    subtitle_y_position: int
+    subtitle_y_position: int  # 입력으로 받지만 무시하고 해상도 기준으로 덮어씀
 
 # 최종 비디오 생성 함수
-async def create_final_video(video_filenames: List[str], 
-                       subtitles: List[str], 
-                       music_url: str,
-                       font_path: str,
-                       font_effect: str,
-                       font_color: str,
-                       subtitle_y_position: int):
+async def create_final_video(
+    video_filenames: List[str],
+    subtitles: List[str],
+    music_url: str,
+    font_path: str,
+    font_effect: str,
+    font_color: str,
+    subtitle_y_position: int
+):
+    # ✅ 해상도 기준으로 자막 크기 및 위치 계산 (첫 번째 영상 기준)
+    filename = video_filenames[0]
+    if not filename.endswith(".mp4"):
+        filename += ".mp4"
+    video_path = os.path.join("videos", filename)
+    if not os.path.exists(video_path):
+        raise FileNotFoundError(f"❌ Video file not found: {video_path}")
 
-    font_size = 40
+    temp_clip = VideoFileClip(video_path)
+    video_height = temp_clip.h
+    font_size = int(video_height * 0.025)
+    subtitle_y_position = int(video_height / 2)  # 영상 중앙에 위치
+    #subtitle_y_position = int(video_height * 4 / 5) - int(font_size / 2)
+    print(f"🎯 video height: {video_height}, font size: {font_size}, subtitle y: {subtitle_y_position}")
+    temp_clip.close()
+
     video_clips = []
-    if(font_effect == "poping"):
+    if font_effect == "poping":
         tts_audio_path, durations = await tts.text_to_speech_with_poping(subtitles)
-        video_clips = create_subtitle.create_video_with_word_subtitles(video_filenames, subtitles, durations,font_path, font_size, font_color, subtitle_y_position)
+        video_clips = create_subtitle.create_video_with_word_subtitles(
+            video_filenames, subtitles, durations, font_path, font_size, font_color, subtitle_y_position)
     elif font_effect == "split":
         tts_audio_path, durations = await tts.text_to_speech(subtitles)
-        video_clips = create_subtitle.create_video_with_split_subtitles(video_filenames, subtitles, durations, font_path, font_size, font_color, subtitle_y_position)
-
+        video_clips = create_subtitle.create_video_with_split_subtitles(
+            video_filenames, subtitles, durations, font_path, font_size, font_color, subtitle_y_position)
     elif font_effect == "custom_poping":
         tts_audio_path, word_timings_list = await tts.text_to_speech_with_poping([" ".join(chunks) for chunks in subtitles])
         video_clips = create_subtitle.create_video_with_custom_chunks(
             video_filenames, subtitles, word_timings_list, font_path, font_size, font_color, subtitle_y_position)
-
 
     # ✅ 모든 비디오 클립 이어 붙이기
     final_video = concatenate_videoclips(video_clips, method="compose")
 
     # ✅ 배경음악 로드
     music_path = os.path.join("music", music_url)
-    bgm_audio = AudioFileClip(music_path).volumex(0.2)  # 배경음 줄이기
+    bgm_audio = AudioFileClip(music_path).volumex(0.2)
 
     # ✅ TTS 로드
     tts_audio = AudioFileClip(tts_audio_path)
@@ -62,7 +75,7 @@ async def create_final_video(video_filenames: List[str],
     # ✅ 두 오디오를 합침
     combined_audio = CompositeAudioClip([bgm_audio, tts_audio]).set_duration(final_video.duration)
 
-     # ✅ 임시 TTS 파일 삭제
+    # ✅ 임시 TTS 파일 삭제
     if os.path.exists(tts_audio_path):
         os.remove(tts_audio_path)
 
@@ -85,7 +98,6 @@ async def create_final_video(video_filenames: List[str],
 # FastAPI 엔드포인트
 @router.post("/")
 async def generate_final_video(request: FinalVideoRequest):
-
     final_video = await create_final_video(
         request.videos,
         request.subtitles,
@@ -93,7 +105,7 @@ async def generate_final_video(request: FinalVideoRequest):
         request.font_path,
         request.font_effect,
         request.font_color,
-        request.subtitle_y_position
+        request.subtitle_y_position  # 넘어오긴 하지만 무시됨
     )
 
     final_video_path = f"http://{SERVER_HOST}/videos/{final_video}"
