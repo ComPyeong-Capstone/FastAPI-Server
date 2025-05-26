@@ -84,14 +84,15 @@ async def generate_prompt_from_image_and_subtitle(image_path: str, subtitle: str
     cinematic_prompt = f"""
     You are an AI prompt engineer for Runway Gen-3.
 
-    Based on the image and subtitle, write a vivid, short cinematic video prompt (1–2 sentences, max 50 words).
-    Include:
-    - Visual details from the image
-    - Strong dynamic movement (camera motion, gestures, lighting)
-    - The emotion or message implied by the subtitle
-    - End with: in a {selected_style} style.
+    Given the image and subtitle, write a cinematic video prompt (1–2 sentences, max 50 words) that:
+    - Describes key objects or characters visible in the image
+    - Makes those subjects perform noticeable, exaggerated **physical actions** (e.g., running, jumping, collapsing, dancing, reacting)
+    - Avoids camera-only movement. Emphasize subject-driven motion instead.
+    - Conveys the emotion or context implied by the subtitle
 
-    Only return the prompt.
+    End the prompt with: in a {selected_style} style.
+
+    Only return the prompt text.
     """.strip()
 
     final_response = await asyncio.to_thread(
