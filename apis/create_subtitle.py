@@ -2,7 +2,7 @@ import os
 from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
 
 # ✅ 문장 반 나누는 자막 생성 함수
-def create_video_with_split_subtitles(video_filenames, subtitles, durations, font_path, font_size, text_color, subtitle_y_position):
+def create_video_with_split_subtitles(video_filenames, subtitles, durations, font_path, font_sizes, text_color, subtitle_y_positions):
     """
     비디오 파일들과 자막(문장 리스트)과 각 자막 duration을 받아
     문장 반 나눠서 자막을 입힌 비디오 클립 리스트를 반환하는 함수.
@@ -19,6 +19,8 @@ def create_video_with_split_subtitles(video_filenames, subtitles, durations, fon
         subtitle_text = subtitles[idx]
         words = subtitle_text.strip().split()
         half = (len(words) + 1) // 2
+        font_size = font_sizes[idx]        
+        subtitle_y_position = subtitle_y_positions[idx]
 
         first_sub = " ".join(words[:half])
         second_sub = " ".join(words[half:])
@@ -34,7 +36,7 @@ def create_video_with_split_subtitles(video_filenames, subtitles, durations, fon
                 size=(clip.w, 100 + 50),
                 method='caption'
             )
-            .set_position(("center", clip.h + subtitle_y_position))
+            .set_position(("center", subtitle_y_position))
             .set_start(0)
             .set_duration(duration)
         )
@@ -48,7 +50,7 @@ def create_video_with_split_subtitles(video_filenames, subtitles, durations, fon
                 size=(clip.w, 100 + 50),
                 method='caption'
             )
-            .set_position(("center", clip.h + subtitle_y_position))
+            .set_position(("center", subtitle_y_position))
             .set_start(duration)
             .set_duration(clip.duration - duration)
         )
@@ -60,7 +62,7 @@ def create_video_with_split_subtitles(video_filenames, subtitles, durations, fon
 
 
 # ✅ 단어별로 튀어나오는 자막 생성 함수
-def create_video_with_word_subtitles(video_filenames, subtitles, word_timings_list, font_path, font_size, text_color, subtitle_y_position):
+def create_video_with_word_subtitles(video_filenames, subtitles, word_timings_list, font_path, font_sizes, text_color, subtitle_y_positions):
     """
     자연스럽게 병합된 단어 자막을 영상에 입히는 함수
     """
@@ -76,6 +78,8 @@ def create_video_with_word_subtitles(video_filenames, subtitles, word_timings_li
         subtitle_text = subtitles[idx].strip()
         subtitle_words = subtitle_text.split()
         whisper_word_timings = word_timings_list[idx]
+        font_size = font_sizes[idx]                
+        subtitle_y_position = subtitle_y_positions[idx]        
 
         # 1. Whisper-자막 정렬
         aligned_word_timings = align_words_with_timings_split(subtitle_words, whisper_word_timings)
@@ -117,7 +121,7 @@ def create_video_with_word_subtitles(video_filenames, subtitles, word_timings_li
                 font=font_path,
                 size=(clip.w, 200),
                 method='caption'
-            ).set_position(("center", clip.h + subtitle_y_position))
+            ).set_position(("center", subtitle_y_position))
 
             pop = txt.resize(lambda t: 0.3 + 0.7 * (t / 0.2) if t < 0.2 else 1)
             pop = pop.set_start(local_start).set_duration(duration)
@@ -269,7 +273,7 @@ def align_words_with_timings_split(subtitle_words, whisper_words):
     return aligned_words
 
 
-def create_video_with_custom_chunks(video_filenames, subtitle_chunks_list, whisper_word_timings_list, font_path, font_size, text_color, subtitle_y_position):
+def create_video_with_custom_chunks(video_filenames, subtitle_chunks_list, whisper_word_timings_list, font_path, font_sizes, text_color, subtitle_y_positions):
     """
     사용자가 직접 정의한 자막 덩어리 리스트를 기반으로 poping 애니메이션 자막을 생성하는 함수.
     Whisper 단어 타이밍과 매칭하여 각 덩어리의 시작/끝 시간으로 자막 처리.
@@ -299,6 +303,8 @@ def create_video_with_custom_chunks(video_filenames, subtitle_chunks_list, whisp
         clip = VideoFileClip(video_path)
         subtitle_chunks = subtitle_chunks_list[idx]
         whisper_word_timings = whisper_word_timings_list[idx]
+        font_size = font_sizes[idx]        
+        subtitle_y_position = subtitle_y_positions[idx]
 
         # 사용자 자막 덩어리를 Whisper 타이밍과 매칭
         aligned_chunks = align_custom_subtitles_with_timings(subtitle_chunks, whisper_word_timings)
@@ -332,7 +338,7 @@ def create_video_with_custom_chunks(video_filenames, subtitle_chunks_list, whisp
                 font=font_path,
                 size=(clip.w, 150),
                 method='caption'
-            ).set_position(("center", clip.h + subtitle_y_position))
+            ).set_position(("center", subtitle_y_position))
 
             pop = txt.resize(lambda t: 0.3 + 0.7 * (t / 0.2) if t < 0.2 else 1)
             pop = pop.set_start(local_start).set_duration(duration)
@@ -380,7 +386,7 @@ def align_custom_subtitles_with_timings(subtitle_chunks, whisper_word_timings):
 
 
 #사실상 기존과 동일
-def create_video_with_poping_subtitles(video_filenames, subtitles, word_timings_list, font_path, font_size, text_color, subtitle_y_position):
+def create_video_with_poping_subtitles(video_filenames, subtitles, word_timings_list, font_path, font_sizes, text_color, subtitle_y_positions):
     """
     글자가 작게 시작해서 커지는 팝업 애니메이션을 적용하되 선명도를 유지한 버전
     """
@@ -398,6 +404,8 @@ def create_video_with_poping_subtitles(video_filenames, subtitles, word_timings_
         subtitle_text = subtitles[idx].strip()
         subtitle_words = subtitle_text.split()
         whisper_word_timings = word_timings_list[idx]
+        font_size = font_sizes[idx]        
+        subtitle_y_position = subtitle_y_positions[idx]
 
         aligned_word_timings = align_words_with_timings_split(subtitle_words, whisper_word_timings)
         merged_word_timings = merge_natural_korean_phrases(aligned_word_timings)
@@ -426,7 +434,7 @@ def create_video_with_poping_subtitles(video_filenames, subtitles, word_timings_
                 font=font_path,
                 size=(clip.w * 2, 300),
                 method='caption'
-            ).resize(0.5).set_position(("center", clip.h + subtitle_y_position))
+            ).resize(0.5).set_position(("center", subtitle_y_position))
 
             # 팝업 애니메이션 적용 (선명도 유지)
             pop = txt.resize(lambda t: 0.3 + 0.7 * (t / 0.2) if t < 0.2 else 1)
