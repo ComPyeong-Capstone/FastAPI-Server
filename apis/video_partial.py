@@ -17,6 +17,12 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 RUNWAY_API_KEY = os.getenv("RUNWAY_API_KEY")
 SERVER_HOST = os.getenv("SERVER_HOST")
 
+# 🎨 스타일 리스트
+STYLE_OPTIONS = [
+    "cyberpunk", "anime-style exaggeration", "watercolor dreamscape", "glitchcore",
+    "vaporwave", "surrealism", "neon noir", "kaleidoscopic burst", "pixel art chaos"
+]
+
 # Runway 클라이언트 초기화
 openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
 client = RunwayML(api_key=RUNWAY_API_KEY)
@@ -34,34 +40,77 @@ class SingleVideoRequest(BaseModel):
 async def generate_prompt_from_image_and_subtitle(image_path: str, subtitle: str) -> str:
     base64_image = await asyncio.to_thread(lambda: base64.b64encode(open(image_path, "rb").read()).decode("utf-8"))
 
-    response = await asyncio.to_thread(
+    # 1️⃣ 스타일 선택
+    style_selection_prompt = f"""
+    You are an AI assistant.
+    Analyze the image and subtitle below, and select the most visually appropriate artistic style for cinematic video generation.
+    Only return the name of the style from this list:
+
+    {', '.join(STYLE_OPTIONS)}.
+
+    Here is how to decide:
+    - If the image feels peaceful, minimal, or dreamlike → 'watercolor dreamscape'
+    - If chaotic, glitchy, or stressful → 'glitchcore' or 'cyberpunk'
+    - If colorful and symmetric like a visual burst → 'kaleidoscopic burst'
+    - If expressive, funny, or energetic → 'anime-style exaggeration'
+    - If it resembles low-res games or old tech → 'pixel art chaos'
+    - If it has a nostalgic, 90s retro vibe → 'vaporwave'
+    - If it shows surreal, illogical, or dreamlike visuals → 'surrealism'
+    - If it’s dark, cinematic, with neon lighting → 'neon noir'
+
+    Subtitle: {subtitle}    
+    """.strip()
+
+    style_response = await asyncio.to_thread(
         openai_client.chat.completions.create,
         model="gpt-4-turbo",
         messages=[
+            {"role": "system", "content": style_selection_prompt},
             {
                 "role": "user",
                 "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/png;base64,{base64_image}"}
-                    },
-                    {
-                        "type": "text",
-                        "text": (
-                            "You are an AI prompt engineer for cinematic video generation.\n"
-                            f"Given the image above and the subtitle below, create a vivid, cinematic prompt "
-                            "for a Runway Gen-3 video. Use one or two sentences, under 50 words, describing the scene visually.\n\n"
-                            f"Subtitle: {subtitle}"
-                            f"Only respond in English."
-                        )
-                    }
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}},
+                    {"type": "text", "text": f"Subtitle: {subtitle}"}
+                ]
+            }
+        ],
+        max_tokens=10
+    )
+
+    selected_style = style_response.choices[0].message.content.strip()
+    print(f"\n🎨 Selected style: {selected_style}")
+
+    # 2️⃣ 스타일 기반 최종 프롬프트 생성
+    cinematic_prompt = f"""
+    You are an AI prompt engineer for Runway Gen-3.
+
+    Based on the image and subtitle, write a vivid, short cinematic video prompt (1–2 sentences, max 50 words).
+    Include:
+    - Visual details from the image
+    - Strong dynamic movement (camera motion, gestures, lighting)
+    - The emotion or message implied by the subtitle
+    - End with: in a {selected_style} style.
+
+    Only return the prompt.
+    """.strip()
+
+    final_response = await asyncio.to_thread(
+        openai_client.chat.completions.create,
+        model="gpt-4-turbo",
+        messages=[
+            {"role": "system", "content": cinematic_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}},
+                    {"type": "text", "text": f"Subtitle: {subtitle}"}
                 ]
             }
         ],
         max_tokens=200
     )
 
-    prompt = response.choices[0].message.content.strip()
+    prompt = final_response.choices[0].message.content.strip()
     print(f"\n🖼️ Generated prompt for image + subtitle:\n{prompt}")
     return prompt
 

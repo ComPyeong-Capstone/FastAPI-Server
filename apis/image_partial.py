@@ -46,6 +46,16 @@ def generate_image(prompt: str, number: int) -> str:
     if not os.path.exists("images"):
         os.makedirs("images")
 
+    base_filename = f"generated_image_{number}"
+    image_filename = f"{base_filename}.jpeg"
+    image_path = os.path.join("images", image_filename)
+
+    suffix = 1
+    while os.path.exists(image_path):
+        image_filename = f"{base_filename}_{suffix}.jpeg"
+        image_path = os.path.join("images", image_filename)
+        suffix += 1
+
     response = requests.post(
         "https://api.stability.ai/v2beta/stable-image/generate/sd3",
         headers={
@@ -62,8 +72,6 @@ def generate_image(prompt: str, number: int) -> str:
     )
 
     if response.status_code == 200:
-        image_filename = f"generated_image_{number}.jpeg"
-        image_path = os.path.join("images", image_filename)
         with open(image_path, "wb") as f:
             f.write(response.content)
 
