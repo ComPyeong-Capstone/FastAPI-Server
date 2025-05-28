@@ -279,4 +279,12 @@ async def upload_images_and_generate(
     ]
     video_urls = await asyncio.gather(*video_tasks)
 
-    return {"video_urls": video_urls}
+    results = [
+        {
+            "image_url": f"http://{SERVER_HOST}:8000/images/{filename}",
+            "video_url": video_url
+        }
+        for filename, video_url in zip(image_filenames, video_urls)
+    ]
+
+    return {"results": results}
