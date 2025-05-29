@@ -160,14 +160,14 @@ async def generate_video(image_filename: str, subtitle: str, number: int = None)
             with open(request_counter_path, "r") as f:
                 current_request_number = int(f.read().strip())
             current_request_number += 1
-            if current_request_number > 20:
+            if current_request_number > 100:
                 current_request_number = 1
 
         # 🔄 삭제 정책
-        if current_request_number == 10:
-            delete_range = range(11, 21)
-        elif current_request_number == 20:
-            delete_range = range(1, 11)
+        if current_request_number == 50:
+            delete_range = range(51, 100)
+        elif current_request_number == 100:
+            delete_range = range(1, 50)
         else:
             delete_range = []
 
