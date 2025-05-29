@@ -11,6 +11,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 STABLE_DIFFUSION_API_KEY = os.getenv("STABLE_DIFFUSION_API_KEY")
 SERVER_HOST = os.getenv("SERVER_HOST")
 
+suffix = 1
+
 router = APIRouter()
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
@@ -50,7 +52,7 @@ def generate_image(prompt: str, number: int) -> str:
     image_filename = f"{base_filename}.jpeg"
     image_path = os.path.join("images", image_filename)
 
-    suffix = 1
+    
     while os.path.exists(image_path):
         image_filename = f"{base_filename}_{suffix}.jpeg"
         image_path = os.path.join("images", image_filename)
